@@ -21,6 +21,11 @@ Usage:
 python3 /path/to/split_stab_to_elf.py /path/to/input/file.stab /path/to/input/file.stabstr /path/to/output/file.elf
 ```
 
+# STABS debug info to JSON
+
+A patch to `prdbg.c` from GNU Binutils that will output the information in JSON format.  
+Some functionality (like C++ data types) are not implemented properly.  
+
 # See also
 
 gdb-stabs documentation: https://sourceware.org/gdb/current/onlinedocs/stabs.html  
@@ -29,4 +34,5 @@ objdump documentation from Binutils: https://sourceware.org/binutils/docs/binuti
 
 # License
 
-MIT license, see `LICENSE` file for more information
+For `prdbg.c`, GPL v3 (or at your option any later version).  
+For everything else, MIT license, see `LICENSE` file for more information  
