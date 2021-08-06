@@ -894,6 +894,7 @@ pr_array_type (void *p, bfd_signed_vma lower, bfd_signed_vma upper,
       sprintf (ab, "|[%s:%s]", abl, abu);
     }
 #endif
+#if 0
   if (lower == 0)
     {
       if (upper == -1)
@@ -905,6 +906,7 @@ pr_array_type (void *p, bfd_signed_vma lower, bfd_signed_vma upper,
   }
     }
   else
+#endif
     {
       print_vma (lower, abl, false, false);
       print_vma (upper, abu, false, false);
@@ -929,7 +931,7 @@ pr_array_type (void *p, bfd_signed_vma lower, bfd_signed_vma upper,
     }
 #endif
 
-  sprintf (abb, "{\"info_type\" : \"array_type\", %s, \"kind\" : |, \"stringp\" : %s, \"range_type\" : %s}", ab, stringp ? "true" : "false", range_type);
+  sprintf (abb, "{\"info_type\" : \"array_type\", %s, \"type\" : |, \"stringp\" : %s, \"range_type\" : %s}", ab, stringp ? "true" : "false", range_type);
   if (! substitute_type (info, abb))
     return false;
 
@@ -1321,7 +1323,7 @@ pr_struct_field (void *p, const char *name, bfd_vma bitpos, bfd_vma bitsize,
   if (! append_type (info, "{\"info_type\" : \"struct_field\""))
     return false;
 #if 1
-  if (! append_type (info, ", \"kind\" : "))
+  if (! append_type (info, ", \"type\" : "))
     return false;
   if (! append_type (info, t))
     return false;
@@ -1876,6 +1878,7 @@ pr_tag_type (void *p, const char *name, unsigned int id,
   if (! append_type (info, "\""))
     return false;
 
+#if 0
   if (name != NULL)
     tag = name;
   else
@@ -1890,7 +1893,20 @@ pr_tag_type (void *p, const char *name, unsigned int id,
     return false;
   if (! append_type (info, "\""))
     return false;
+#endif
+  if (name != NULL)
+  {
+    if (! append_type (info, ", \"name\" : \""))
+      return false;
+    if (! append_type (info, name))
+      return false;
+    if (! append_type (info, "\""))
+      return false;
+  }
+
+#if 0
   if (name != NULL && kind != DEBUG_KIND_ENUM)
+#endif
     {
       sprintf (idbuf, ", \"id\" : %u", id);
       if (! append_type (info, idbuf))
@@ -1924,7 +1940,7 @@ pr_typdef (void *p, const char *name)
   indent (info);
   fprintf (info->f, "typedef %s;\n", s);
 #endif
-  fprintf (info->f, "{\"info_type\" : \"typedef\", \"type\" : %s, \"name\" : \"%s\"},\n", s, name);
+  fprintf (info->f, "{\"info_type\" : \"typdef\", \"type\" : %s, \"name\" : \"%s\"},\n", s, name);
 
   free (s);
 
@@ -2100,7 +2116,7 @@ pr_start_function (void *p, const char *name, bool global)
   fprintf (info->f, "%s (", t);
 #endif
 #endif
-  fprintf (info->f, "{\"info_type\" : \"start_function\", \"type\" : %s, \"name\" : \"%s\", \"global\" : %s},\n", t, name, global ? "true" : "false");
+  fprintf (info->f, "{\"info_type\" : \"start_function\", \"type\" : %s, \"name\" : \"%s\", \"global\" : %s, \"parameters\" : [", t, name, global ? "true" : "false");
 
   info->parameter = 1;
 
@@ -2141,6 +2157,9 @@ pr_function_parameter (void *p, const char *name,
   bool is_register = false;
   if (kind == DEBUG_PARM_REG || kind == DEBUG_PARM_REF_REG)
     is_register = true;
+
+  if (info->parameter != 1)
+    fprintf (info->f, ", ");
 #if 0
 #if SHOULD_DUMP_FUNCTIONS
   if (info->parameter != 1)
@@ -2162,7 +2181,7 @@ pr_function_parameter (void *p, const char *name,
 #endif
 #endif
 
-  fprintf (info->f, "{\"info_type\" : \"function_parameter\", \"type\" : %s, \"name\" : \"%s\", \"pointer\" : %s, \"register\" : %s, \"ab\" : %s},\n", t, name, is_pointer ? "true" : "false", is_register ? "true" : "false", ab);
+  fprintf (info->f, "{\"info_type\" : \"function_parameter\", \"type\" : %s, \"name\" : \"%s\", \"pointer\" : %s, \"register\" : %s, \"ab\" : %s}", t, name, is_pointer ? "true" : "false", is_register ? "true" : "false", ab);
 
   free (t);
 
@@ -2182,6 +2201,8 @@ pr_start_block (void *p, bfd_vma addr)
   struct pr_handle *info = (struct pr_handle *) p;
   char ab[22];
 
+  print_vma (addr, ab, true, true);
+
   if (info->parameter > 0)
     {
 #if 0
@@ -2193,6 +2214,7 @@ pr_start_block (void *p, bfd_vma addr)
 #endif
 #endif
 #endif
+      fprintf (info->f, "], \"addr\" : %s},\n", ab);
       info->parameter = 0;
     }
 
@@ -2216,8 +2238,6 @@ pr_start_block (void *p, bfd_vma addr)
   info->indent += 2;
 #endif
 #endif
-
-  print_vma (addr, ab, true, true);
 
   fprintf (info->f, "{\"info_type\" : \"start_block\", \"ab\" : %s},\n", ab);
 

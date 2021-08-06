@@ -26,6 +26,14 @@ python3 /path/to/split_stab_to_elf.py /path/to/input/file.stab /path/to/input/fi
 A patch to `prdbg.c` from GNU Binutils that will output the information in JSON format.  
 Some functionality (like C++ data types) are not implemented properly.  
 
+# JSON to the scripting format of an industry-leading disassembler
+
+`json2pcode.py` converts the output of the above "STABS debug info to JSON" to the scripting format of an industry-leading disassembler.  
+Known missing/incomplete features:  
+* C++ types  
+* Global variable types  
+* Local variables  
+
 # See also
 
 gdb-stabs documentation: https://sourceware.org/gdb/current/onlinedocs/stabs.html  
