@@ -135,6 +135,12 @@ def read_hdrr(g):
         "cbExtOffset" : m_cbExtOffset,
     }
 
+def read_null_ending_string(f):
+    import itertools
+    import functools
+    toeof = iter(functools.partial(f.read, 1), b'')
+    return sys.intern((b''.join(itertools.takewhile(b'\0'.__ne__, toeof))).decode("ASCII"))
+
 
 # from coff/ecoff.h:
 CODE_MASK = 0x8F300
@@ -194,6 +200,78 @@ def read_symr(g):
         "index" : ((s_bits2 & SYM_BITS2_INDEX_LITTLE) >> SYM_BITS2_INDEX_SH_LITTLE) | (s_bits3 << SYM_BITS3_INDEX_SH_LEFT_LITTLE) | (s_bits4 << SYM_BITS4_INDEX_SH_LEFT_LITTLE),
     }
 
+SIZEOF_SYMR = 12
+
+FDR_BITS1_LANG_BIG = 0xF8
+FDR_BITS1_LANG_SH_BIG = 3
+FDR_BITS1_LANG_LITTLE = 0x1F
+FDR_BITS1_LANG_SH_LITTLE = 0
+
+FDR_BITS1_FMERGE_BIG = 0x04
+FDR_BITS1_FMERGE_LITTLE = 0x20
+
+FDR_BITS1_FREADIN_BIG = 0x02
+FDR_BITS1_FREADIN_LITTLE = 0x40
+
+FDR_BITS1_FBIGENDIAN_BIG = 0x01
+FDR_BITS1_FBIGENDIAN_LITTLE = 0x80
+
+FDR_BITS2_GLEVEL_BIG = 0xC0
+FDR_BITS2_GLEVEL_SH_BIG = 6
+FDR_BITS2_GLEVEL_LITTLE = 0x03
+FDR_BITS2_GLEVEL_SH_LITTLE = 0
+
+def read_fdr(g):
+    # FDR structure information from coff/sym.h from binutils
+    m_adr = struct.unpack("<I", g.read(4))[0]
+    m_rss = struct.unpack("<I", g.read(4))[0]
+    m_issBase = struct.unpack("<I", g.read(4))[0]
+    m_cbSs = struct.unpack("<I", g.read(4))[0]
+    m_isymBase = struct.unpack("<I", g.read(4))[0]
+    m_csym = struct.unpack("<I", g.read(4))[0]
+    m_ilineBase = struct.unpack("<I", g.read(4))[0]
+    m_cline = struct.unpack("<I", g.read(4))[0]
+    m_ioptBase = struct.unpack("<I", g.read(4))[0]
+    m_copt = struct.unpack("<I", g.read(4))[0]
+    m_ipdFirst = struct.unpack("<H", g.read(2))[0]
+    m_cpd = struct.unpack("<H", g.read(2))[0]
+    m_iauxBase = struct.unpack("<I", g.read(4))[0]
+    m_caux = struct.unpack("<I", g.read(4))[0]
+    m_rfdBase = struct.unpack("<I", g.read(4))[0]
+    m_crfd = struct.unpack("<I", g.read(4))[0]
+    s_bits1 = struct.unpack("<B", g.read(1))[0]
+    s_bits2 = struct.unpack("<B", g.read(1))[0]
+    s_bits3 = struct.unpack("<B", g.read(1))[0]
+    s_bits4 = struct.unpack("<B", g.read(1))[0]
+    m_cbLineOffset = struct.unpack("<I", g.read(4))[0]
+    m_cbLine = struct.unpack("<I", g.read(4))[0]
+    # Byteswap info from coff/mips.h and bfd/ecoffswap.h from binutils
+    return {
+        "adr" : m_adr,
+        "rss" : m_rss,
+        "issBase" : m_issBase,
+        "cbSs" : m_cbSs,
+        "isymBase" : m_isymBase,
+        "csym" : m_csym,
+        "ilineBase" : m_ilineBase,
+        "cline" : m_cline,
+        "ioptBase" : m_ioptBase,
+        "copt" : m_copt,
+        "ipdFirst" : m_ipdFirst,
+        "cpd" : m_cpd,
+        "iauxBase" : m_iauxBase,
+        "caux" : m_caux,
+        "rfdBase" : m_rfdBase,
+        "crfd" : m_crfd,
+        "lang" : ((s_bits1 & FDR_BITS1_LANG_LITTLE) >> FDR_BITS1_LANG_SH_LITTLE),
+        "fMerge" : 0 != (s_bits1 & FDR_BITS1_FMERGE_LITTLE),
+        "fReadin" : 0 != (s_bits1 & FDR_BITS1_FREADIN_LITTLE),
+        "fBigendian" : 0 != (s_bits1 & FDR_BITS1_FBIGENDIAN_LITTLE),
+        "glevel" : ((s_bits2 & FDR_BITS2_GLEVEL_LITTLE) >> FDR_BITS2_GLEVEL_SH_LITTLE),
+        "cbLineOffset" : m_cbLineOffset,
+        "cbLine" : m_cbLine,
+    }
+
 if True:
     stab_typeinfo = {}
     stab_typeinfo_curfile = ""
@@ -208,38 +286,40 @@ if True:
             g = io.BytesIO(mdebugsect.data())
             hdrr = read_hdrr(g)
             f.seek(hdrr["cbSsOffset"])
-            symtbl_index_to_offset = []
-            symtbl_strs = []
+            g2 = None
             with open(sys.argv[3], "wb") as wf:
                 strt = f.read(hdrr["issMax"] * 1)
                 wf.write(strt)
-                symtbl_strs = strt.split(b"\x00")
-                lastpos = strt.find(b"\x00")
-                while lastpos != -1:
-                    symtbl_index_to_offset.append(lastpos)
-                    lastpos = strt.find(b"\x00", lastpos + 1)
-            symtbl_offset_to_index = {}
-            for i in range(len(symtbl_index_to_offset)):
-                symtbl_offset_to_index[symtbl_index_to_offset[i] + 1] = i
-            f.seek(hdrr["cbSymOffset"])
+                g2 = io.BytesIO(strt)
+            ifds = []
+            f.seek(hdrr["cbFdOffset"])
+            for i in range(hdrr["ifdMax"]):
+                fdr = read_fdr(f)
+                ifds.append(fdr)
+            wrote_header = False
             with open(sys.argv[2], "wb") as wf:
-                for i in range(hdrr["isymMax"]):
-                    # self.Elf_word('n_strx'),
-                    # self.Elf_byte('n_type'),
-                    # self.Elf_byte('n_other'),
-                    # self.Elf_half('n_desc'),
-                    # self.Elf_word('n_value'),
-                    symr = read_symr(f)
-                    if ECOFF_IS_STAB(symr):
-                        wf.write(struct.pack("<IBBHI", symr["iss"], ECOFF_UNMARK_STAB(symr["index"]), 0, 0, symr["value"]))
-                        # if ECOFF_UNMARK_STAB(symr["index"]) in stab_ntype_table:
-                        #     print(stab_ntype_table[ECOFF_UNMARK_STAB(symr["index"])], symtbl_strs[symtbl_offset_to_index[symr["iss"]] + 1], symr["value"], mdebug_st_value[symr["st"]], symr["sc"])
-                        # else:
-                        #     print("UNTYPED", ECOFF_UNMARK_STAB(symr["index"]), symtbl_strs[symtbl_offset_to_index[symr["iss"]] + 1], symr["value"], mdebug_st_value[symr["st"]], symr["sc"])
-                    else:
-                        if mdebug_st_value[symr["st"]] == "stLabel" and symtbl_strs[symtbl_offset_to_index[symr["iss"]] + 1].startswith(b"$LM"):
-                            wf.write(struct.pack("<IBBHI", 0, 0x44, 0, symr["index"], symr["value"]))
-                        # print(symr["index"], symtbl_strs[symtbl_offset_to_index[symr["iss"]] + 1], symr["value"], mdebug_st_value[symr["st"]], symr["sc"])
+                for fdr in ifds:
+                    isyms = []
+                    f.seek(hdrr["cbSymOffset"] + (fdr["isymBase"] * SIZEOF_SYMR))
+                    for i in range(fdr["csym"]):
+                        isyms.append(read_symr(f))
+                    for symr in isyms:
+                        # self.Elf_word('n_strx'),
+                        # self.Elf_byte('n_type'),
+                        # self.Elf_byte('n_other'),
+                        # self.Elf_half('n_desc'),
+                        # self.Elf_word('n_value'),
+                        offs = fdr["issBase"] + symr["iss"]
+                        g2.seek(offs)
+                        strrr = read_null_ending_string(g2)
+                        if ECOFF_IS_STAB(symr):
+                            if (ECOFF_UNMARK_STAB(symr["index"]) == 0x00):
+                                if wrote_header:
+                                    continue
+                                wrote_header = True
+                            # if (stab_ntype_table[ECOFF_UNMARK_STAB(symr["index"])] == "LBRAC" or stab_ntype_table[ECOFF_UNMARK_STAB(symr["index"])] == "RBRAC"):
+                            #     offs = fdr["issBase"]
+                            wf.write(struct.pack("<IBBHI", offs, ECOFF_UNMARK_STAB(symr["index"]), 0, 0, symr["value"]))
         else:
             stabsect_name = ".stab"
             stabsect = elffile.get_section_by_name(stabsect_name)
