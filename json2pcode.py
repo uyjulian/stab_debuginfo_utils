@@ -153,8 +153,26 @@ walk_functbl = {
 
 pr_functbl = {}
 
+special_keywords = [
+	"class",
+	"private",
+	"protected",
+	"public",
+]
+def pr_filter_keyword_from_name(name):
+	nname = name
+	if nname in special_keywords:
+		nname = nname + "_"
+	return nname
+
 def pr_dispatch(info, name=None):
-	return pr_functbl[info["info_type"]](info, name)
+	return pr_functbl[info["info_type"]](info, pr_filter_keyword_from_name(name))
+
+def pr_filter_name(name):
+	nname = name
+	if nname == "":
+		nname = "__empty_name"
+	return "" if nname == None else " " + nname
 
 def pr_start_compilation_unit(info, name):
 	return "/* TODO */"
@@ -163,28 +181,28 @@ def pr_start_source(info, name):
 	return "/* TODO */"
 
 def pr_void_type(info, name):
-	return "void%s" % ("" if name == None else " " + name)
+	return "void%s" % (pr_filter_name(name))
 
 def pr_int_type(info, name):
-	return "%sint%d%s" % ("u" if info["unsigned"] else "", info["size"], "" if name == None else " " + name)
+	return "%sint%d%s" % ("u" if info["unsigned"] else "", info["size"], pr_filter_name(name))
 
 def pr_float_type(info, name):
-	return "float%d%s" % (info["size"], "" if name == None else " " + name)
+	return "float%d%s" % (info["size"], pr_filter_name(name))
 
 def pr_complex_type(info, name):
 	return "complex %s" % (pr_dispatch(info["type"], name))
 
 def pr_bool_type(info, name):
-	return "bool%d%s" % (info["size"], "" if name == None else " " + name)
+	return "bool%d%s" % (info["size"], pr_filter_name(name))
 
 def pr_enum_type(info, name):
 	if (len(info["names"]) == 2 and info["names"][0][0] == "False" and info["names"][1][0] == "True" and info["names"][0][1] == 0 and info["names"][1][1] == 1):
-		return "bool%s" % ("" if name == None else " " + name)
+		return "bool%s" % (pr_filter_name(name))
 	fieldsa = []
 	for field in info["names"]:
 		fieldsa.append("%s = %i" % (field[0], field[1]))
 	fieldss = ", ".join(fieldsa)
-	return "enum%s {%s}%s" % ((" " + info["tag"]) if "tag" in info else "", fieldss, "" if name == None else " " + name)
+	return "enum%s {%s}%s" % ((" " + info["tag"]) if "tag" in info else "", fieldss, pr_filter_name(name))
 
 def pr_pointer_type(info, name):
 	return "%s" % (pr_dispatch(info["type"],  "*" if name == None else "*" + name))
@@ -218,17 +236,17 @@ def pr_start_struct_type(info, name):
 	for field in info["fields"]:
 		fieldsa.append(pr_dispatch(field))
 	fieldss = " ".join(fieldsa)
-	return "%s %s {%s}%s" % ("struct" if info["structp"] else "union", info["tag"] if "tag" in info else ("__anon_struct_%u" % (info["id"])), fieldss, "" if name == None else " " + name)
+	return "%s %s {%s}%s" % ("struct" if info["structp"] else "union", info["tag"] if "tag" in info else ("__anon_struct_%u" % (info["id"])), fieldss, pr_filter_name(name))
 
 def pr_struct_field(info, name):
 	# return "%s; /* bitsize %i, bitpos %i */" % (pr_dispatch(info["type"], info["name"]), info["bitsize"], info["bitpos"])
 	return "%s;" % (pr_dispatch(info["type"], info["name"]))
 
 def pr_typedef_type(info, name):
-	return "%s%s" % (info["name"], "" if name == None else " " + name)
+	return "%s%s" % (info["name"], pr_filter_name(name))
 
 def pr_tag_type(info, name):
-	return "%s %s%s" % (info["kind"], info["name"] if "name" in info else ("__anon_struct_%u" % (info["id"])), "" if name == None else " " + name)
+	return "%s %s%s" % (info["kind"], info["name"] if "name" in info else ("__anon_struct_%u" % (info["id"])), pr_filter_name(name))
 
 def pr_typdef(info, name):
 	return "typedef %s;" % (pr_dispatch(info["type"], info["name"]))
@@ -356,8 +374,7 @@ def idc_tag(info, name):
 	return "ParseTypes(\"%s\", 0);" % (pr_tag(info, name))
 
 def idc_variable(info, name):
-	# TODO: variable type
-	return "set_name(0x%08x,\"%s\");" % (info["ab"], info["name"])
+	return "set_name(0x%08x,\"%s\");SetType(0x%08x,\"%s\");" % (info["ab"], info["name"], info["ab"], pr_variable(info, name))
 
 def idc_start_function(info, name):
 	return "add_func(0x%08x);set_name(0x%08x,\"%s\");SetType(0x%08x,\"%s\");" % (info["addr"], info["addr"], info["name"], info["addr"], pr_start_function(info, name))

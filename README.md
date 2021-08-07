@@ -37,9 +37,10 @@ Some functionality (like C++ data types) are not implemented properly.
 `json2pcode.py` converts the output of the above "STABS debug info to JSON" to the scripting format of an industry-leading disassembler.  
 Known missing/incomplete features:  
 * C++ types  
-* Global variable types  
 * Local variables  
 * 64-bit support  
+
+Due to independency issues, you need to run the generated script twice.  
 
 # See also
 
