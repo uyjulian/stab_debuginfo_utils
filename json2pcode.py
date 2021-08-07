@@ -500,19 +500,38 @@ if False:
 		sys.stdout.write(pr_dispatch(x))
 		sys.stdout.write("\n")
 
+def deposit_stack_variables(start, end, varz, outlines, wf):
+	for x in varz:
+		if x["info_type"] == "variable" and x["static"] == False and x["register"] == False:
+			ab = x["ab"]
+			if (ab & 0x80000000) != 0:
+				outlines.append("define_local_var(0X%08x, 0X%08x, \"[bp-0X%08x]\", \"%s\");" % (start, end, -(ab - 0x100000000), x["name"]))
+
 with open(sys.argv[2], "w") as wf:
 	block_depth = 0
 	func_queue = []
+	localvars_queue = []
 	builtin_typedef_queue = []
 	trivial_typedef_queue = []
 	anonstruct_typedef_queue = []
 	other_queue = []
 	wf.write("#include <idc.idc>\nstatic main(void) {\n")
+	start_addr = 0
+	end_addr = 0
+	vars_tmp = []
 	for x in ar:
 		if x["info_type"] == "start_block":
+			if block_depth == 0:
+				start_addr = x["ab"]
 			block_depth += 1
 		elif x["info_type"] == "end_block":
 			block_depth -= 1
+			if block_depth == 0:
+				deposit_stack_variables(start_addr, x["ab"], vars_tmp, localvars_queue, wf)
+				vars_tmp.clear()
+		elif block_depth != 0:
+			if x["info_type"] == "variable":
+				vars_tmp.append(x)
 		elif block_depth == 0:
 			idc_txt = idc_dispatch(x)
 			if x["info_type"] == "start_function":
@@ -538,6 +557,9 @@ with open(sys.argv[2], "w") as wf:
 		wf.write(x)
 		wf.write("\n")
 	for x in func_queue:
+		wf.write(x)
+		wf.write("\n")
+	for x in localvars_queue:
 		wf.write(x)
 		wf.write("\n")
 	# wf.write("qexit(0);\n")
