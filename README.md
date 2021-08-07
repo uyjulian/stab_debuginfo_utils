@@ -8,6 +8,9 @@ Missing dependencies, or get `ModuleNotFoundError`? Install them with `python3 -
 
 Supports reading `.stab`, `.stabstr`, and `.mdebug` section.  
 `.mdebug` section will be converted to the `.stab` and `.stabstr` specification.  
+Limitations:  
+* 32-bit support only
+
 Usage:  
 ```bash
 python3 /path/to/elf_to_split_stab.py /path/to/input/file.elf /path/to/output/file.stab /path/to/output/file.stabstr
@@ -15,7 +18,10 @@ python3 /path/to/elf_to_split_stab.py /path/to/input/file.elf /path/to/output/fi
 
 # Split STAB section to ELF
 
-Supports reading `.stab`, and `.stabstr` pre-split files.
+Supports reading `.stab`, and `.stabstr` pre-split files.  
+Limitations:  
+* 32-bit support only
+
 Usage:  
 ```bash
 python3 /path/to/split_stab_to_elf.py /path/to/input/file.stab /path/to/input/file.stabstr /path/to/output/file.elf
@@ -33,6 +39,7 @@ Known missing/incomplete features:
 * C++ types  
 * Global variable types  
 * Local variables  
+* 64-bit support  
 
 # See also
 
