@@ -5,7 +5,8 @@ import pprint
 import io
 
 from elftools.elf.elffile import ELFFile
-from elftools.elf.sections import Section, StabSection, StringTableSection
+from elftools.elf.sections import Section, StabSection, StringTableSection, SymbolTableSection
+from elftools.elf.descriptions import describe_symbol_type
 
 stab_ntype_table = {
     0x00 : "UNDF",
@@ -282,6 +283,29 @@ if True:
         mdebugsect_name = ".mdebug"
         mdebugsect = elffile.get_section_by_name(mdebugsect_name)
 
+        addr_to_section = {}
+        for section in elffile.iter_sections():
+            name = section.name
+            addr = section['sh_addr']
+            if addr == 0:
+                continue
+            if addr not in addr_to_section:
+                addr_to_section[addr] = name
+
+        addr_to_symbol = {}
+        for section in elffile.iter_sections():
+            if isinstance(section, SymbolTableSection):
+                for cnt, symbol in enumerate(section.iter_symbols()):
+                    if describe_symbol_type(symbol["st_info"]["type"]) != "NOTYPE":
+                        continue
+                    name = symbol.name
+                    if name in ["", "_retonly", "gcc2_compiled.", "__gnu_compiled_c"] or name[:1] == ".":
+                        continue
+                    addr = symbol['st_value']
+
+                    if addr not in addr_to_symbol:
+                        addr_to_symbol[addr] = name
+
         if isinstance(mdebugsect, Section):
             g = io.BytesIO(mdebugsect.data())
             hdrr = read_hdrr(g)
@@ -297,7 +321,15 @@ if True:
                 fdr = read_fdr(f)
                 ifds.append(fdr)
             wrote_header = False
+            symcount = 0
+            for fdr in ifds:
+                symcount += fdr["csym"]
             with open(sys.argv[2], "wb") as wf:
+                bracket_depth = 0
+                largest_addr = 0
+                so_encountered = 0
+                last_so_value = 0
+                last_fun_value = 0
                 for fdr in ifds:
                     isyms = []
                     f.seek(hdrr["cbSymOffset"] + (fdr["isymBase"] * SIZEOF_SYMR))
@@ -313,13 +345,87 @@ if True:
                         g2.seek(offs)
                         strrr = read_null_ending_string(g2)
                         if ECOFF_IS_STAB(symr):
-                            if (ECOFF_UNMARK_STAB(symr["index"]) == 0x00):
+                            stab_unmarked = ECOFF_UNMARK_STAB(symr["index"])
+                            if (stab_unmarked == 0x00):
+                                largest_addr = 0
+                                last_so_value = 0
+                                last_fun_value = 0
                                 if wrote_header:
                                     continue
                                 wrote_header = True
-                            # if (stab_ntype_table[ECOFF_UNMARK_STAB(symr["index"])] == "LBRAC" or stab_ntype_table[ECOFF_UNMARK_STAB(symr["index"])] == "RBRAC"):
+                            value = symr["value"]
+                            if stab_unmarked in stab_ntype_table:
+                                if stab_ntype_table[stab_unmarked] == "FUN":
+                                    last_fun_value = value
+                                if stab_ntype_table[stab_unmarked] == "LBRAC":
+                                    bracket_depth += 1
+                                if stab_ntype_table[stab_unmarked] == "RBRAC":
+                                    bracket_depth -= 1
+                                if stab_ntype_table[stab_unmarked] == "SO" and strrr != "":
+                                    last_so_value = value
+                                    if so_encountered != 2:
+                                        so_encountered += 1
+                                    else:
+                                        # XXX: check if offset 0 is actually null string
+                                        wf.write(struct.pack("<IBBHI", 0, 0x64, 0, 0, largest_addr))
+                                if (stab_ntype_table[stab_unmarked] == "STSYM") and (bracket_depth != 0):
+                                    # Value is offset from some section, figure out which section it is.
+                                    strrr_symbol = strrr
+                                    strrr_symbol_colon_pos = strrr_symbol.find(":")
+                                    if strrr_symbol_colon_pos != -1:
+                                        strrr_symbol = strrr_symbol[:strrr_symbol_colon_pos]
+                                    found_possible_addrs = []
+                                    for symbol_addr in addr_to_symbol:
+                                        symbol = addr_to_symbol[symbol_addr]
+                                        symbol_period_pos = symbol.find(".")
+                                        if symbol_period_pos != -1:
+                                            symbol = symbol[:symbol_period_pos]
+                                            if strrr_symbol == symbol:
+                                                found_possible_addrs.append(symbol_addr)
+
+                                    for section_addr in addr_to_section:
+                                        value_added = value + section_addr
+                                        if value_added in found_possible_addrs:
+                                            value = value_added
+                                            break
+                                elif (stab_ntype_table[stab_unmarked] in ["STSYM", "LCSYM", "GSYM"]) and (bracket_depth == 0):
+                                    # Correct the offset to that specified in the symbol table.
+                                    strrr_symbol = strrr
+                                    strrr_symbol_colon_pos = strrr_symbol.find(":")
+                                    if strrr_symbol_colon_pos != -1:
+                                        strrr_symbol = strrr_symbol[:strrr_symbol_colon_pos]
+                                    found_possible_addrs = []
+                                    for symbol_addr in addr_to_symbol:
+                                        symbol = addr_to_symbol[symbol_addr]
+                                        symbol_period_pos = symbol.find(".")
+                                        if symbol_period_pos == -1:
+                                            if strrr_symbol == symbol:
+                                                value = symbol_addr
+                                                break
+                                if stab_ntype_table[stab_unmarked] in ["RBRAC"]:
+                                    # need to relocate it relative to global
+                                    value_tmp = value + last_so_value
+                                    if value_tmp > largest_addr:
+                                        largest_addr = value_tmp
+                                if stab_ntype_table[stab_unmarked] in ["LBRAC", "RBRAC"]:
+                                    # need to relocate it relative to function
+                                    value += last_so_value
+                                    value -= last_fun_value
+                                if stab_ntype_table[stab_unmarked] in ["FUN", "SO"]:
+                                    if value > largest_addr:
+                                        largest_addr = value
+                            # if (stab_ntype_table[stab_unmarked] in ["LBRAC", "RBRAC"]):
                             #     offs = fdr["issBase"]
-                            wf.write(struct.pack("<IBBHI", offs, ECOFF_UNMARK_STAB(symr["index"]), 0, 0, symr["value"]))
+
+                            desc = 0
+                            if stab_unmarked == 0x00:
+                                desc = symcount
+                                value = hdrr["issMax"]
+                            wf.write(struct.pack("<IBBHI", offs, stab_unmarked, 0, desc, value))
+                if bracket_depth != 0:
+                    raise Exception("XXX: bracket depth should be 0 at exit!")
+                # XXX: check if offset 0 is actually null string
+                wf.write(struct.pack("<IBBHI", 0, 0x64, 0, 0, largest_addr))
         else:
             stabsect_name = ".stab"
             stabsect = elffile.get_section_by_name(stabsect_name)
