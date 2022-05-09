@@ -547,7 +547,7 @@ with open(sys.argv[2], "w") as wf:
 	for x in func_queue:
 		wf.write(x)
 		wf.write("\n")
-	# wf.write("qexit(0);\n")
+	wf.write("qexit(0);\n")
 	wf.write("}\n")
 
 def deposit_stack_variable_types(start, end, varz, outinfo_py):
