@@ -374,10 +374,12 @@ def idc_tag(info, name):
 	return "ParseTypes(\"%s\", 0);" % (pr_tag(info, name))
 
 def idc_variable(info, name):
-	return "set_name(0x%08x,\"%s\");SetType(0x%08x,\"%s\");" % (info["ab"], info["name"], info["ab"], pr_variable(info, name))
+	# return "set_name(0x%08x,\"%s\");SetType(0x%08x,\"%s\");" % (info["ab"], info["name"], info["ab"], pr_variable(info, name))
+	return "SetType(0x%08x,\"%s\");" % (info["ab"], pr_variable(info, name))
 
 def idc_start_function(info, name):
-	return "add_func(0x%08x);set_name(0x%08x,\"%s\");SetType(0x%08x,\"%s\");" % (info["addr"], info["addr"], info["name"], info["addr"], pr_start_function(info, name))
+	# return "add_func(0x%08x);set_name(0x%08x,\"%s\");SetType(0x%08x,\"%s\");" % (info["addr"], info["addr"], info["name"], info["addr"], pr_start_function(info, name))
+	return "SetType(0x%08x,\"%s\");" % (info["addr"], pr_start_function(info, name))
 
 idc_functbl = {
 	"start_compilation_unit" : idc_dummy,
@@ -412,6 +414,7 @@ idc_functbl = {
 }
 
 # Move anonymous structures to typedefs if available
+# TODO: move anonymous structures to typedefs when not available
 if True:
 	tag_types = []
 	struct_types = []
@@ -500,25 +503,16 @@ if False:
 		sys.stdout.write(pr_dispatch(x))
 		sys.stdout.write("\n")
 
-def deposit_stack_variables(start, end, varz, outlines, wf):
-	for x in varz:
-		if x["info_type"] == "variable" and x["static"] == False and x["register"] == False:
-			ab = x["ab"]
-			if (ab & 0x80000000) != 0:
-				outlines.append("define_local_var(0X%08x, 0X%08x, \"[bp-0X%08x]\", \"%s\");" % (start, end, -(ab - 0x100000000), x["name"]))
-
+# TODO: move this to disassembler Python script
 with open(sys.argv[2], "w") as wf:
 	block_depth = 0
 	func_queue = []
-	localvars_queue = []
 	builtin_typedef_queue = []
 	trivial_typedef_queue = []
-	anonstruct_typedef_queue = []
 	other_queue = []
 	wf.write("#include <idc.idc>\nstatic main(void) {\n")
 	start_addr = 0
 	end_addr = 0
-	vars_tmp = []
 	for x in ar:
 		if x["info_type"] == "start_block":
 			if block_depth == 0:
@@ -526,12 +520,11 @@ with open(sys.argv[2], "w") as wf:
 			block_depth += 1
 		elif x["info_type"] == "end_block":
 			block_depth -= 1
-			if block_depth == 0:
-				deposit_stack_variables(start_addr, x["ab"], vars_tmp, localvars_queue, wf)
-				vars_tmp.clear()
 		elif block_depth != 0:
 			if x["info_type"] == "variable":
-				vars_tmp.append(x)
+				if x["static"]:
+					idc_txt = idc_dispatch(x)
+					other_queue.append(idc_txt)
 		elif block_depth == 0:
 			idc_txt = idc_dispatch(x)
 			if x["info_type"] == "start_function":
@@ -540,8 +533,6 @@ with open(sys.argv[2], "w") as wf:
 				builtin_typedef_queue.append(idc_txt)
 			elif x["info_type"] == "typdef" and x["type"]["info_type"] == "tag_type":
 				trivial_typedef_queue.append(idc_txt)
-			# elif x["info_type"] == "typdef" and x["type"]["info_type"] == "start_struct_type":
-			# 	anonstruct_typedef_queue.append(idc_txt)
 			else:
 				other_queue.append(idc_txt)
 	for x in builtin_typedef_queue:
@@ -550,18 +541,53 @@ with open(sys.argv[2], "w") as wf:
 	for x in trivial_typedef_queue:
 		wf.write(x)
 		wf.write("\n")
-	for x in anonstruct_typedef_queue:
-		wf.write(x)
-		wf.write("\n")
 	for x in other_queue:
 		wf.write(x)
 		wf.write("\n")
 	for x in func_queue:
 		wf.write(x)
 		wf.write("\n")
-	for x in localvars_queue:
-		wf.write(x)
-		wf.write("\n")
 	# wf.write("qexit(0);\n")
 	wf.write("}\n")
+
+def deposit_stack_variable_types(start, end, varz, outinfo_py):
+	for x in varz:
+		if x["info_type"] == "variable" and x["static"] == False:
+			if x["register"] == False:
+				ab = x["ab"]
+				if (ab & 0x80000000) != 0:
+					outinfo_py.append(["stkoff", start, end, pr_dispatch(x["type"]), x["name"], -(ab - 0x100000000)])
+			elif x["register"] == True:
+				ab = x["ab"]
+				outinfo_py.append(["reg1", start, end, pr_dispatch(x["type"]), x["name"], ab])
+
+if len(sys.argv) > 3:
+	with open(sys.argv[3], "w") as wf:
+		block_depth = 0
+		outinfo_py = []
+		start_addr = 0
+		vars_tmp = []
+		for x in ar:
+			if x["info_type"] == "start_block":
+				if block_depth == 0:
+					start_addr = x["ab"]
+				block_depth += 1
+			elif x["info_type"] == "end_block":
+				block_depth -= 1
+				if block_depth == 0:
+					deposit_stack_variable_types(start_addr, x["ab"], vars_tmp, outinfo_py)
+					vars_tmp.clear()
+			elif block_depth != 0:
+				if x["info_type"] == "variable":
+					vars_tmp.append(x)
+			elif block_depth == 0:
+				pass
+		json.dump(obj=outinfo_py, fp=wf, indent="\t")
+
+
+
+
+
+
+
 
