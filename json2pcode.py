@@ -271,6 +271,8 @@ def pr_start_function(info, name):
 	argsa = []
 	for arg in info["parameters"]:
 		argsa.append(pr_dispatch(arg))
+	if "varargs" in info and info["varargs"]:
+		argsa.append("...")
 	argss = ", ".join(argsa)
 	# return "%s %s(%s); /* 0x%08x */" % (pr_dispatch(info["type"]), info["name"], argss, info["addr"])
 	return "%s %s(%s);" % (pr_dispatch(info["type"]), info["name"], argss)
@@ -497,6 +499,41 @@ if True:
 			# id_to_struct[iid]["type"]["kind"] = "struct" if id_to_typedef[iid]["type"]["structp"] else "union"
 			# id_to_struct[iid]["type"]["id"] = id_to_typedef[iid]["type"]["id"]
 
+# Derive vararg argument for debugging information that does not contain it
+if True:
+	func_info = None
+	block_depth = 0
+	has_va_list_argument = False
+	has_va_list_variable = False
+	for info in ar:
+		if info["info_type"] == "start_function":
+			if func_info == None:
+				func_info = info
+			else:
+				raise Exception("Function information without ending block")
+			for arg in info["parameters"]:
+				if arg["type"]["info_type"] == "typedef_type" and arg["type"]["name"] == "va_list":
+					has_va_list_argument = True
+		elif info["info_type"] == "start_block":
+			if block_depth == 0:
+				if func_info == None:
+					raise Exception("Start block without function information")
+			block_depth += 1
+		elif info["info_type"] == "end_block":
+			block_depth -= 1
+			if block_depth == 0:
+				if func_info != None:
+					if (not has_va_list_argument) and has_va_list_variable:
+						func_info["varargs"] = True
+					func_info = None
+					has_va_list_argument = False
+					has_va_list_variable = False
+				else:
+					raise Exception("End block without function information")
+		elif info["info_type"] == "variable":
+			if block_depth != 0:
+				if info["type"]["info_type"] == "typedef_type" and info["type"]["name"] == "va_list":
+					has_va_list_variable = True
 
 if False:
 	for x in ar:
