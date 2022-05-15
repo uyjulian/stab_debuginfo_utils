@@ -4,13 +4,6 @@ import json
 
 ar = []
 
-with open(sys.argv[1], "r") as f:
-	f.readline()
-	f.readline()
-	ars = "[" + f.read() + "null]"
-	ar = json.loads(ars)
-	ar.pop()
-
 walk_functbl = {}
 
 def walk_dispatch(info, callback):
@@ -417,7 +410,7 @@ idc_functbl = {
 
 # Move anonymous structures to typedefs if available
 # TODO: move anonymous structures to typedefs when not available
-if True:
+def move_anonymous_structures_to_typedefs(ar):
 	tag_types = []
 	struct_types = []
 	typdefs = []
@@ -455,7 +448,7 @@ if True:
 						info["info_type"] = "typedef_type"
 						info["name"] = id_to_typedef_name[iid]
 # Move named structures to typedefs if there is such an association
-if True:
+def move_named_structures_to_typedefs(ar):
 	tag_types = []
 	struct_types = []
 	typdefs = []
@@ -500,7 +493,7 @@ if True:
 			# id_to_struct[iid]["type"]["id"] = id_to_typedef[iid]["type"]["id"]
 
 # Derive vararg argument for debugging information that does not contain it
-if True:
+def derive_vararg_argument(ar):
 	func_info = None
 	block_depth = 0
 	has_va_list_argument = False
@@ -535,13 +528,13 @@ if True:
 				if info["type"]["info_type"] == "typedef_type" and info["type"]["name"] == "va_list":
 					has_va_list_variable = True
 
-if False:
+def write_pr_dispatch(ar, wf):
 	for x in ar:
 		sys.stdout.write(pr_dispatch(x))
 		sys.stdout.write("\n")
 
 # TODO: move this to disassembler Python script
-with open(sys.argv[2], "w") as wf:
+def write_idc_types(ar, wf):
 	block_depth = 0
 	func_queue = []
 	builtin_typedef_queue = []
@@ -598,28 +591,49 @@ def deposit_stack_variable_types(start, end, varz, outinfo_py):
 				ab = x["ab"]
 				outinfo_py.append(["reg1", start, end, pr_dispatch(x["type"]), x["name"], ab])
 
-if len(sys.argv) > 3:
-	with open(sys.argv[3], "w") as wf:
-		block_depth = 0
-		outinfo_py = []
-		start_addr = 0
-		vars_tmp = []
-		for x in ar:
-			if x["info_type"] == "start_block":
-				if block_depth == 0:
-					start_addr = x["ab"]
-				block_depth += 1
-			elif x["info_type"] == "end_block":
-				block_depth -= 1
-				if block_depth == 0:
-					deposit_stack_variable_types(start_addr, x["ab"], vars_tmp, outinfo_py)
-					vars_tmp.clear()
-			elif block_depth != 0:
-				if x["info_type"] == "variable":
-					vars_tmp.append(x)
-			elif block_depth == 0:
-				pass
-		json.dump(obj=outinfo_py, fp=wf, indent="\t")
+def write_hx_json_info(ar, wf):
+	block_depth = 0
+	outinfo_py = []
+	start_addr = 0
+	vars_tmp = []
+	for x in ar:
+		if x["info_type"] == "start_block":
+			if block_depth == 0:
+				start_addr = x["ab"]
+			block_depth += 1
+		elif x["info_type"] == "end_block":
+			block_depth -= 1
+			if block_depth == 0:
+				deposit_stack_variable_types(start_addr, x["ab"], vars_tmp, outinfo_py)
+				vars_tmp.clear()
+		elif block_depth != 0:
+			if x["info_type"] == "variable":
+				vars_tmp.append(x)
+		elif block_depth == 0:
+			pass
+	json.dump(obj=outinfo_py, fp=wf, indent="\t")
+
+if __name__ == "__main__":
+	ar = []
+	if len(sys.argv) > 1:
+		with open(sys.argv[1], "r") as f:
+			f.readline()
+			f.readline()
+			ars = "[" + f.read() + "null]"
+			ar = json.loads(ars)
+			ar.pop()
+		move_anonymous_structures_to_typedefs(ar)
+		move_named_structures_to_typedefs(ar)
+		derive_vararg_argument(ar)
+		if False:
+			write_pr_dispatch(ar, wf)
+		if len(sys.argv) > 2:
+			with open(sys.argv[2], "w") as wf:
+				write_idc_types(ar, wf)
+		if len(sys.argv) > 3:
+			with open(sys.argv[3], "w") as wf:
+				write_hx_json_info(ar, wf)
+
 
 
 
