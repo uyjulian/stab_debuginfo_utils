@@ -168,10 +168,10 @@ def pr_filter_name(name):
 	return "" if nname == None else " " + nname
 
 def pr_start_compilation_unit(info, name):
-	return "/* TODO */"
+	return "/* compilation unit: %s */" % info["filename"]
 
 def pr_start_source(info, name):
-	return "/* TODO */"
+	return "/* include file: %s */" % info["filename"]
 
 def pr_void_type(info, name):
 	return "void%s" % (pr_filter_name(name))
@@ -280,7 +280,7 @@ def pr_start_block(info, name):
 	return "/* start block */"
 
 def pr_lineno(info, name):
-	return "/* TODO */"
+	return "/* Line number %d in %s at 0x%x */" % (info["lineno"], info["filename"], info["ab"])
 
 def pr_end_block(info, name):
 	return "/* end block */"
@@ -530,8 +530,8 @@ def derive_vararg_argument(ar):
 
 def write_pr_dispatch(ar, wf):
 	for x in ar:
-		sys.stdout.write(pr_dispatch(x))
-		sys.stdout.write("\n")
+		wf.write(pr_dispatch(x))
+		wf.write("\n")
 
 # TODO: move this to disassembler Python script
 def write_idc_types(ar, wf):
