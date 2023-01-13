@@ -2,11 +2,50 @@
 import idaapi
 import ida_hexrays
 import ida_kernwin
+import ida_lines
 import ida_typeinf
 import ida_nalt
 import json
 
 idati = idaapi.get_idati()
+
+def get_lvars_ex(cfunc):
+    ccode = cfunc.get_pseudocode()
+    segmentations = []
+    datas = []
+    for ypos in range(0, cfunc.hdrlines):
+        tline = ccode.at(ypos).line
+        idx = 0
+        idx_start = None
+        idx_end = None
+        last_lvar = None
+        while idx < len(tline):
+            ci = ida_hexrays.ctree_item_t()
+            if cfunc.get_line_item(tline, idx, True, None, ci, None) and ci.citype == idaapi.VDI_LVAR:
+                lvarr = ci.get_lvar()
+                if lvarr != None:
+                    if lvarr != last_lvar:
+                        if idx_start != None and idx_end != None:
+                            segmentations.append(str(ida_lines.tag_remove(tline))[idx_start:idx_end])
+                            idx_start = None
+                            idx_end = None
+                        idx_start = idx
+                        idx_end = idx
+                        datas.append(lvarr)
+                        last_lvar = lvarr
+                    else:
+                        idx_end = idx
+            idx += ida_lines.tag_advance(tline[idx], 1)
+        if idx_start != None:
+            segmentations.append(str(ida_lines.tag_remove(tline))[idx_start:])
+            idx_start = None
+            idx_end = None
+    if len(segmentations) != len(datas):
+        raise Exception("Couldn't associate lvars with segmented text")
+    retval = []
+    for i in range(len(segmentations)):
+        retval.append([datas[i], segmentations[i]])
+    return retval
 
 def set_lvar_type_and_name(t, name, ea, filter_func=None):
     has_type = True
@@ -43,21 +82,27 @@ def set_lvar_type_and_name(t, name, ea, filter_func=None):
         cfunc = idaapi.decompile(ea)
         if not cfunc:
             return False
-        in_lvars = cfunc.get_lvars()
-        lvars = [n for n in in_lvars if filter_func(n)]
-        if len(lvars) >= 1:
-            lvar = lvars[0]
+        in_lvars_ex = get_lvars_ex(cfunc)
+        in_lvars = [n[0] for n in in_lvars_ex]
+        lvars = [n[0] for n in in_lvars_ex if filter_func(n[0], n[1])]
+        # To handle the possibility of variables at different ranges, handle them all
+        lvar_count = 0
+        for lvar in lvars:
             new_name = None
             new_type = None
             if name != None and lvar.name != name:
+                name_to_use = name
+                if lvar_count != 0:
+                    name_to_use += "_%d" % lvar_count
                 names = [n.name for n in in_lvars]
-                if name in names:
-                    name = make_unique_name(name, names)
-                print("changing name of {} to {}".format(lvar.name, name))
-                new_name = name
+                if name_to_use in names:
+                    name_to_use = make_unique_name(name_to_use, names)
+                print("changing name of {} to {}".format(lvar.name, name_to_use))
+                new_name = name_to_use
             if t != None:
                 print("changing type of {} to {}: {}".format(lvar.name, t, orig_t))
                 new_type = ida_typeinf.tinfo_t(tif)
+            lvar_count += 1
             if new_name != None or new_type != None:
                 lsi = ida_hexrays.lvar_saved_info_t()
                 lsi.ll = lvar
@@ -71,9 +116,11 @@ def set_lvar_type_and_name(t, name, ea, filter_func=None):
                 if not ida_hexrays.modify_user_lvar_info(ea, modify_flags, lsi):
                     print("unable to modify user lvar info")
                     res = False
-        else:
+        if len(lvars) == 0:
             print("couldn't find {} at {}".format(name, ea))
             res = False
+        if res == True:
+            ida_hexrays.mark_cfunc_dirty(ea, False)
     else:
         print("couldn't get func at {}".format(ea))
         res = False
@@ -97,7 +144,7 @@ if True:
             frame_sz = idaapi.get_frame_size(idaapi.get_func(d1[1]))
 
             # print("Setting lvar at %x" % d1[1])
-            def filterX(n):
+            def filterX(n, segmentation):
                 if n.is_arg_var or (n.name == ""):
                     return False
                 if d1[0] == "reg1":
