@@ -47,30 +47,29 @@ def set_lvar_type_and_name(t, name, ea, filter_func=None):
         lvars = [n for n in in_lvars if filter_func(n)]
         if len(lvars) >= 1:
             lvar = lvars[0]
+            new_name = None
+            new_type = None
             if name != None and lvar.name != name:
                 names = [n.name for n in in_lvars]
                 if name in names:
                     name = make_unique_name(name, names)
                 print("changing name of {} to {}".format(lvar.name, name))
-                lsi = ida_hexrays.lvar_saved_info_t()
-                lsi.ll = lvar
-                lsi.name = name
-                tres2 = ida_hexrays.modify_user_lvar_info(ea, ida_hexrays.MLI_NAME, lsi)
-                if tres2:
-                    pass
-                else:
-                    print("can't save name of {} to {}".format(lvar.name, name))
-                    res = False
+                new_name = name
             if t != None:
                 print("changing type of {} to {}: {}".format(lvar.name, t, orig_t))
+                new_type = ida_typeinf.tinfo_t(tif)
+            if new_name != None or new_type != None:
                 lsi = ida_hexrays.lvar_saved_info_t()
                 lsi.ll = lvar
-                lsi.type = ida_typeinf.tinfo_t(tif)
-                tres2 = ida_hexrays.modify_user_lvar_info(ea, ida_hexrays.MLI_TYPE, lsi)
-                if tres2:
-                    pass
-                else:
-                    print("can't save type of {} to {}".format(lvar.name, t))
+                modify_flags = 0
+                if new_name != None:
+                    lsi.name = new_name
+                    modify_flags |= ida_hexrays.MLI_NAME
+                if new_type != None:
+                    lsi.type = new_type
+                    modify_flags |= ida_hexrays.MLI_TYPE
+                if not ida_hexrays.modify_user_lvar_info(ea, modify_flags, lsi):
+                    print("unable to modify user lvar info")
                     res = False
         else:
             print("couldn't find {} at {}".format(name, ea))
@@ -81,9 +80,13 @@ def set_lvar_type_and_name(t, name, ea, filter_func=None):
     return res
 
 if True:
+    is_interactive_mode = False
     # primitives = ['bool', 'double', 'float', 'int', 'long long', 'long', 'short', 'signed char', 'unsigned char', 'unsigned int', 'unsigned long long', 'unsigned long', 'unsigned short', 'void']
-    # x = ida_kernwin.ask_file(1, "*.json", "Enter name of export json file:")
-    x = ida_nalt.get_input_file_path() + ".idb.lvarinfo.json"
+    x = None
+    if is_interactive_mode:
+        x = ida_kernwin.ask_file(1, "*.json", "Enter name of export json file:")
+    else:
+        x = ida_nalt.get_input_file_path() + ".idb.lvarinfo.json"
     with open(x, "r") as f:
         d = json.load(f)
         for d1 in d:
@@ -116,4 +119,5 @@ if True:
             #     break
             # if d1[0] == "stkoff":
             #     break
-    idaapi.qexit(0)
+    if not is_interactive_mode:
+        idaapi.qexit(0)
