@@ -626,13 +626,16 @@ if __name__ == "__main__":
 		move_named_structures_to_typedefs(ar)
 		derive_vararg_argument(ar)
 		if False:
-			write_pr_dispatch(ar, wf)
-		if len(sys.argv) > 2:
-			with open(sys.argv[2], "w") as wf:
-				write_idc_types(ar, wf)
-		if len(sys.argv) > 3:
-			with open(sys.argv[3], "w") as wf:
-				write_hx_json_info(ar, wf)
+			if len(sys.argv) > 2:
+				with open(sys.argv[2], "w") as wf:
+					write_pr_dispatch(ar, wf)
+		else:
+			if len(sys.argv) > 2:
+				with open(sys.argv[2], "w") as wf:
+					write_idc_types(ar, wf)
+			if len(sys.argv) > 3:
+				with open(sys.argv[3], "w") as wf:
+					write_hx_json_info(ar, wf)
 
 
 
