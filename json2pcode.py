@@ -584,9 +584,12 @@ def deposit_stack_variable_types(start, end, varz, outinfo_py):
 	for x in varz:
 		if x["info_type"] == "variable" and x["static"] == False:
 			if x["register"] == False:
+				# Relative to ebp
 				ab = x["ab"]
+				# Do unsigned to signed conversion
 				if (ab & 0x80000000) != 0:
-					outinfo_py.append(["stkoff", start, end, pr_dispatch(x["type"]), x["name"], -(ab - 0x100000000)])
+					ab -= 0x100000000
+				outinfo_py.append(["stkoff", start, end, pr_dispatch(x["type"]), x["name"], ab])
 			elif x["register"] == True:
 				ab = x["ab"]
 				outinfo_py.append(["reg1", start, end, pr_dispatch(x["type"]), x["name"], ab])

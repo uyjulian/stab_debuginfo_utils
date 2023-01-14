@@ -6,7 +6,10 @@ import ida_lines
 import ida_typeinf
 import ida_nalt
 import json
+import re
 
+i386_stack_match = re.compile('\\[ebp([\\-\\+].*?)h\\]')
+mips_stack_match = re.compile('\\[([\\-\\+].*?)h\\]')
 idati = idaapi.get_idati()
 
 def get_lvars_ex(cfunc):
@@ -126,14 +129,108 @@ def set_lvar_type_and_name(t, name, ea, filter_func=None):
         res = False
     return res
 
+register_int_to_name = {
+    "mips" : {
+        # See SYMBOLIC_REGISTER_NAMES in tc-mips.c in gdb/binutils
+        "$zero" : 0 ,
+        "$at" : 1 ,
+        "$v0" : 2 ,
+        "$v1" : 3 ,
+        "$a0" : 4 ,
+        "$a1" : 5 ,
+        "$a2" : 6 ,
+        "$a3" : 7 ,
+        "$s0" : 16,
+        "$s1" : 17,
+        "$s2" : 18,
+        "$s3" : 19,
+        "$s4" : 20,
+        "$s5" : 21,
+        "$s6" : 22,
+        "$s7" : 23,
+        "$t8" : 24,
+        "$t9" : 25,
+        "$k0" : 26,
+        "$k1" : 27,
+        "$gp" : 28,
+        "$sp" : 29,
+        "$fp" : 30,
+        "$ra" : 31,
+        # O32 names
+        "$t0" : 8 ,
+        "$t1" : 9 ,
+        "$t2" : 10,
+        "$t3" : 11,
+        "$t4" : 12,
+        "$t5" : 13,
+        "$t6" : 14,
+        "$t7" : 15,
+    },
+    "i386" : {
+        # See i386_register_names in gdb/binutils
+        "eax" : 0 ,
+        "ecx" : 1 ,
+        "edx" : 2 ,
+        "ebx" : 3 ,
+        "ebp" : 4 ,
+        "esp" : 5 ,
+        "esi" : 6 ,
+        "edi" : 7 ,
+        "eip" : 8 ,
+        "eflags" : 9 ,
+        "cs" : 10,
+        "ss" : 11,
+        "ds" : 12,
+        "es" : 13,
+        "fs" : 14,
+        "gs" : 15,
+        "st0" : 16,
+        "st1" : 17,
+        "st2" : 18,
+        "st3" : 19,
+        "st4" : 20,
+        "st5" : 21,
+        "st6" : 22,
+        "st7" : 23,
+        "fctrl" : 24,
+        "fstat" : 25,
+        "ftag" : 26,
+        "fiseg" : 27,
+        "fioff" : 28,
+        "foseg" : 29,
+        "fooff" : 30,
+        "fop" : 31,
+        "xmm0" : 32,
+        "xmm1" : 33,
+        "xmm2" : 34,
+        "xmm3" : 35,
+        "xmm4" : 36,
+        "xmm5" : 37,
+        "xmm6" : 38,
+        "xmm7" : 39,
+        "mxcsr" : 40,
+    },
+}
+
 if True:
-    is_interactive_mode = False
+    is_interactive_mode = True
     # primitives = ['bool', 'double', 'float', 'int', 'long long', 'long', 'short', 'signed char', 'unsigned char', 'unsigned int', 'unsigned long long', 'unsigned long', 'unsigned short', 'void']
     x = None
     if is_interactive_mode:
         x = ida_kernwin.ask_file(1, "*.json", "Enter name of export json file:")
     else:
         x = ida_nalt.get_input_file_path() + ".idb.lvarinfo.json"
+
+    arch = "i386"
+    info_struct = idaapi.get_inf_structure()
+    proc_name = info_struct.procName
+    if "mips" in proc_name:
+        arch = "mips"
+    elif "pc" in proc_name:
+        arch = "i386"
+
+    register_int_to_name_arch = register_int_to_name[arch]
+
     with open(x, "r") as f:
         d = json.load(f)
         for d1 in d:
@@ -147,19 +244,42 @@ if True:
             def filterX(n, segmentation):
                 if n.is_arg_var or (n.name == ""):
                     return False
-                if d1[0] == "reg1":
-                    if n.is_reg1() and not n.is_reg2() and not n.has_user_name:
-                        # ida_hexrays.get_mreg_name
-                        reg1_offs_in = d1[5]
-                        reg1_offs = ida_hexrays.mreg2reg(n.get_reg1(), 4)
-                        # print(reg1_offs, reg1_offs_in)
-                        return n.is_reg1() and reg1_offs_in == reg1_offs
-                elif d1[0] == "stkoff":
-                    if n.is_stk_var():
-                        stkoff_offs_in = frame_sz - d1[5]
-                        stkoff_offs = n.get_stkoff()
-                        # print(stkoff_offs, stkoff_offs_in)
-                        return n.is_stk_var() and stkoff_offs_in == stkoff_offs
+                # String parsing, unfortunately, because I couldn't find an easy way to get the ebp of the variable
+                slash_pos = segmentation.find("// ")
+                if slash_pos != -1:
+                    x_snip = segmentation[slash_pos + 3:]
+                    if len(x_snip) > 0:
+                        if x_snip[0] == "[":
+                            if d1[0] == "stkoff":
+                                # stack variable
+                                if arch == "i386":
+                                    matc = i386_stack_match.search(x_snip)
+                                    stack_offset = None
+                                    if matc != None:
+                                        stack_offset = int(matc.group(1), 16)
+                                    if stack_offset != None:
+                                        if stack_offset == d1[5]:
+                                            return True
+                                elif arch == "mips":
+                                    matc = mips_stack_match.search(x_snip)
+                                    stack_offset = None
+                                    if matc != None:
+                                        stack_offset = int(matc.group(1), 16)
+                                    if stack_offset != None:
+                                        # For some reason, stack offset is substracted by 8
+                                        stack_offset -= 8
+                                        if stack_offset == d1[5]:
+                                            return True
+                        else:
+                            if d1[0] == "reg1":
+                                # register variable
+                                space_pos = x_snip.find(" ")
+                                x_snip_2 = x_snip
+                                if space_pos != -1:
+                                    x_snip_2 = x_snip[:space_pos]
+                                if x_snip_2 in register_int_to_name_arch:
+                                    if register_int_to_name_arch[x_snip_2] == d1[5]:
+                                        return True
                 return False
             res = set_lvar_type_and_name(type_to_set, d1[4], d1[1], filterX)
             # if not res:
