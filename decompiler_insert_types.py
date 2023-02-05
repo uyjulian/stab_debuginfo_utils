@@ -14,6 +14,7 @@ idati = idaapi.get_idati()
 
 def get_lvars_ex(cfunc):
     ccode = cfunc.get_pseudocode()
+    lvars_list = list(cfunc.get_lvars())
     segmentations = []
     datas = []
     for ypos in range(0, cfunc.hdrlines):
@@ -25,7 +26,7 @@ def get_lvars_ex(cfunc):
         while idx < len(tline):
             ci = ida_hexrays.ctree_item_t()
             if cfunc.get_line_item(tline, idx, True, None, ci, None) and ci.citype == idaapi.VDI_LVAR:
-                lvarr = ci.get_lvar()
+                lvarr = lvars_list.index(ci.get_lvar())
                 if lvarr != None:
                     if lvarr != last_lvar:
                         if idx_start != None and idx_end != None:
@@ -47,7 +48,7 @@ def get_lvars_ex(cfunc):
         raise Exception("Couldn't associate lvars with segmented text")
     retval = []
     for i in range(len(segmentations)):
-        retval.append([datas[i], segmentations[i]])
+        retval.append([lvars_list[datas[i]], segmentations[i]])
     return retval
 
 def set_lvar_type_and_name(t, name, ea, filter_func=None):
