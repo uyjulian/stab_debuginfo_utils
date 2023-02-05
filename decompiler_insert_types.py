@@ -12,6 +12,32 @@ i386_stack_match = re.compile('\\[ebp([\\-\\+].*?)h\\]')
 mips_stack_match = re.compile('\\[([\\-\\+].*?)h\\]')
 idati = idaapi.get_idati()
 
+class lvar_range_finder_t(ida_hexrays.ctree_visitor_t):
+    def __init__(self):
+        ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_FAST)
+
+        self.ranges = {}
+        return
+
+    def visit_expr(self, e):
+        try:
+            if e.op == ida_hexrays.cot_var:
+                idx = e.v.idx
+                ranges = self.ranges
+                ea = e.ea
+                if ea != ida_idaapi.BADADDR:
+                    if idx not in ranges:
+                        ranges[idx] = [None, None]
+                    ranges_data = ranges[idx]
+                    if ranges_data[0] == None or ranges_data[0] > ea:
+                        ranges_data[0] = ea
+                    if ranges_data[1] == None or ranges_data[1] < ea:
+                        ranges_data[1] = ea
+        except:
+            pass
+        return 0
+
+
 def get_lvars_ex(cfunc):
     ccode = cfunc.get_pseudocode()
     lvars_list = list(cfunc.get_lvars())
@@ -46,9 +72,15 @@ def get_lvars_ex(cfunc):
             idx_end = None
     if len(segmentations) != len(datas):
         raise Exception("Couldn't associate lvars with segmented text")
+    itfinder = lvar_range_finder_t()
+    itfinder.apply_to(cfunc.body, None)
+    ranges = itfinder.ranges
+    segmentations_map = {}
     retval = []
     for i in range(len(segmentations)):
-        retval.append([lvars_list[datas[i]], segmentations[i]])
+        segmentations_map[datas[i]] = segmentations[i]
+    for x in sorted(segmentations_map.keys()):
+        retval.append([lvars_list[x], segmentations_map[x], ranges[x] if x in ranges else None])
     return retval
 
 def set_lvar_type_and_name(t, name, ea, filter_func=None):
@@ -88,7 +120,7 @@ def set_lvar_type_and_name(t, name, ea, filter_func=None):
             return False
         in_lvars_ex = get_lvars_ex(cfunc)
         in_lvars = [n[0] for n in in_lvars_ex]
-        lvars = [n[0] for n in in_lvars_ex if filter_func(n[0], n[1])]
+        lvars = [n[0] for n in in_lvars_ex if filter_func(n[0], n[1], n[2])]
         # To handle the possibility of variables at different ranges, handle them all
         lvar_count = 0
         for lvar in lvars:
@@ -235,23 +267,35 @@ if True:
     with open(x, "r") as f:
         d = json.load(f)
         for d1 in d:
-            type_to_set = d1[3]
+            var_type = d1[0]
+            func_ea = d1[1]
+            range_start_ea = d1[2]
+            range_end_ea = d1[3]
+            type_to_set = d1[4]
+            name_to_set = d1[5]
+            ab_to_find = d1[6]
             # if type_to_set in primitives:
             #     type_to_set = None
 
-            frame_sz = idaapi.get_frame_size(idaapi.get_func(d1[1]))
+            frame_sz = idaapi.get_frame_size(idaapi.get_func(func_ea))
 
-            # print("Setting lvar at %x" % d1[1])
-            def filterX(n, segmentation):
+            # print("Setting lvar at %x" % func_ea)
+            def filterX(n, segmentation, ranges):
                 if n.is_arg_var or (n.name == ""):
                     return False
+                if ranges != None:
+                    # Check if range of bounds
+                    if ranges[0] < range_start_ea:
+                        return False
+                    if ranges[1] > range_end_ea:
+                        return False
                 # String parsing, unfortunately, because I couldn't find an easy way to get the ebp of the variable
                 slash_pos = segmentation.find("// ")
                 if slash_pos != -1:
                     x_snip = segmentation[slash_pos + 3:]
                     if len(x_snip) > 0:
                         if x_snip[0] == "[":
-                            if d1[0] == "stkoff":
+                            if var_type == "stkoff":
                                 # stack variable
                                 if arch == "i386":
                                     matc = i386_stack_match.search(x_snip)
@@ -259,7 +303,7 @@ if True:
                                     if matc != None:
                                         stack_offset = int(matc.group(1), 16)
                                     if stack_offset != None:
-                                        if stack_offset == d1[5]:
+                                        if stack_offset == ab_to_find:
                                             return True
                                 elif arch == "mips":
                                     matc = mips_stack_match.search(x_snip)
@@ -269,23 +313,23 @@ if True:
                                     if stack_offset != None:
                                         # For some reason, stack offset is substracted by 8
                                         stack_offset -= 8
-                                        if stack_offset == d1[5]:
+                                        if stack_offset == ab_to_find:
                                             return True
                         else:
-                            if d1[0] == "reg1":
+                            if var_type == "reg1":
                                 # register variable
                                 space_pos = x_snip.find(" ")
                                 x_snip_2 = x_snip
                                 if space_pos != -1:
                                     x_snip_2 = x_snip[:space_pos]
                                 if x_snip_2 in register_int_to_name_arch:
-                                    if register_int_to_name_arch[x_snip_2] == d1[5]:
+                                    if register_int_to_name_arch[x_snip_2] == ab_to_find:
                                         return True
                 return False
-            res = set_lvar_type_and_name(type_to_set, d1[4], d1[1], filterX)
+            res = set_lvar_type_and_name(type_to_set, name_to_set, func_ea, filterX)
             # if not res:
             #     break
-            # if d1[0] == "stkoff":
+            # if var_type == "stkoff":
             #     break
     if not is_interactive_mode:
         idaapi.qexit(0)

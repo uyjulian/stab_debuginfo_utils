@@ -580,7 +580,7 @@ def write_idc_types(ar, wf):
 	wf.write("qexit(0);\n")
 	wf.write("}\n")
 
-def deposit_stack_variable_types(start, end, varz, outinfo_py):
+def deposit_stack_variable_types(func_ea, start, end, varz, outinfo_py):
 	for x in varz:
 		if x["info_type"] == "variable" and x["static"] == False:
 			if x["register"] == False:
@@ -589,26 +589,32 @@ def deposit_stack_variable_types(start, end, varz, outinfo_py):
 				# Do unsigned to signed conversion
 				if (ab & 0x80000000) != 0:
 					ab -= 0x100000000
-				outinfo_py.append(["stkoff", start, end, pr_dispatch(x["type"]), x["name"], ab])
+				outinfo_py.append(["stkoff", func_ea, start, end, pr_dispatch(x["type"]), x["name"], ab])
 			elif x["register"] == True:
 				ab = x["ab"]
-				outinfo_py.append(["reg1", start, end, pr_dispatch(x["type"]), x["name"], ab])
+				outinfo_py.append(["reg1", func_ea, start, end, pr_dispatch(x["type"]), x["name"], ab])
 
 def write_hx_json_info(ar, wf):
 	block_depth = 0
 	outinfo_py = []
 	start_addr = 0
+	addr_stack = []
+	vars_stack = []
 	vars_tmp = []
 	for x in ar:
 		if x["info_type"] == "start_block":
 			if block_depth == 0:
 				start_addr = x["ab"]
+			addr_stack.append(x["ab"])
+			vars_stack.append(vars_tmp)
+			vars_tmp = []
 			block_depth += 1
 		elif x["info_type"] == "end_block":
 			block_depth -= 1
+			deposit_stack_variable_types(start_addr, addr_stack.pop(), x["ab"], vars_tmp, outinfo_py)
+			vars_tmp = vars_stack.pop()
 			if block_depth == 0:
-				deposit_stack_variable_types(start_addr, x["ab"], vars_tmp, outinfo_py)
-				vars_tmp.clear()
+				start_addr = 0
 		elif block_depth != 0:
 			if x["info_type"] == "variable":
 				vars_tmp.append(x)
