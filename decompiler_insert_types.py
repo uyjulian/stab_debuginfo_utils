@@ -87,16 +87,10 @@ def set_lvar_type_and_name(t, name, ea, filter_func=None):
     has_type = True
     orig_t = t
     if isinstance(t, str):
-        type_tuple = idaapi.get_named_type(None, t, 1)
         tif = idaapi.tinfo_t()
-        if type_tuple == None:
+        decl_res = ida_typeinf.parse_decl(tif, None, t + ";", 0)
+        if decl_res == None:
             t = None
-        else:
-            if tif.get_numbered_type(idaapi.cvar.idati, type_tuple[6]):
-                t = tif
-            else:
-                print("couldn't convert {} into tinfo_t".format(t))
-                t = None
 
     def make_unique_name(name, taken):
         if name not in taken:
