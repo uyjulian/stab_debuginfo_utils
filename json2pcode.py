@@ -6,111 +6,115 @@ ar = []
 
 walk_functbl = {}
 
-def walk_dispatch(info, callback):
-	return walk_functbl[info["info_type"]](info, callback)
+def walk_dispatch(info, parent, callback):
+	if parent != None:
+		callback(None, parent)
+	ret = walk_functbl[info["info_type"]](info, parent, callback)
+	if parent != None:
+		callback(None, None)
 
-def walk_start_compilation_unit(info, callback):
-	callback(info)
+def walk_start_compilation_unit(info, parent, callback):
+	callback(info, parent)
 
-def walk_start_source(info, callback):
-	callback(info)
+def walk_start_source(info, parent, callback):
+	callback(info, parent)
 
-def walk_void_type(info, callback):
-	callback(info)
+def walk_void_type(info, parent, callback):
+	callback(info, parent)
 
-def walk_int_type(info, callback):
-	callback(info)
+def walk_int_type(info, parent, callback):
+	callback(info, parent)
 
-def walk_float_type(info, callback):
-	callback(info)
+def walk_float_type(info, parent, callback):
+	callback(info, parent)
 
-def walk_complex_type(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_complex_type(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_bool_type(info, callback):
-	callback(info)
+def walk_bool_type(info, parent, callback):
+	callback(info, parent)
 
-def walk_enum_type(info, callback):
-	callback(info)
+def walk_enum_type(info, parent, callback):
+	callback(info, parent)
 
-def walk_pointer_type(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_pointer_type(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_function_type(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_function_type(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_array_type(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_array_type(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_const_type(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_const_type(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_volatile_type(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_volatile_type(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_start_struct_type(info, callback):
+def walk_start_struct_type(info, parent, callback):
 	for field in info["fields"]:
-		walk_dispatch(field, callback)
-	callback(info)
+		walk_dispatch(field, info, callback)
+	callback(info, parent)
 
-def walk_struct_field(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_struct_field(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_typedef_type(info, callback):
-	callback(info)
+def walk_typedef_type(info, parent, callback):
+	callback(info, parent)
 
-def walk_tag_type(info, callback):
-	callback(info)
+def walk_tag_type(info, parent, callback):
+	callback(info, parent)
 
-def walk_typdef(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_typdef(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_tag(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_tag(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_int_constant(info, callback):
-	callback(info)
+def walk_int_constant(info, parent, callback):
+	callback(info, parent)
 
-def walk_float_constant(info, callback):
-	callback(info)
+def walk_float_constant(info, parent, callback):
+	callback(info, parent)
 
-def walk_typed_constant(info, callback):
-	callback(info)
+def walk_typed_constant(info, parent, callback):
+	callback(info, parent)
 
-def walk_variable(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_variable(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_start_function(info, callback):
+def walk_start_function(info, parent, callback):
 	for arg in info["parameters"]:
-		walk_dispatch(arg, callback)
-	walk_dispatch(info["type"], callback)
-	callback(info)
+		walk_dispatch(arg, info, callback)
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_function_parameter(info, callback):
-	walk_dispatch(info["type"], callback)
-	callback(info)
+def walk_function_parameter(info, parent, callback):
+	walk_dispatch(info["type"], info, callback)
+	callback(info, parent)
 
-def walk_start_block(info, callback):
-	callback(info)
+def walk_start_block(info, parent, callback):
+	callback(info, parent)
 
-def walk_lineno(info, callback):
-	callback(info)
+def walk_lineno(info, parent, callback):
+	callback(info, parent)
 
-def walk_end_block(info, callback):
-	callback(info)
+def walk_end_block(info, parent, callback):
+	callback(info, parent)
 
-def walk_end_function(info, callback):
-	callback(info)
+def walk_end_function(info, parent, callback):
+	callback(info, parent)
 
 walk_functbl = {
 	"start_compilation_unit" : walk_start_compilation_unit,
@@ -417,15 +421,33 @@ def move_anonymous_structures_to_typedefs(ar):
 	id_to_struct = {}
 	id_to_typedef_name = {}
 	id_to_typedef = {}
-	def cb(info):
+	parent_stack = []
+	def cb(info, parent):
+		if info == None:
+			if parent != None:
+				parent_stack.append(parent)
+			else:
+				parent_stack.pop()
+			return
 		if info["info_type"] == "typdef":
 			typdefs.append(info)
 		elif info["info_type"] == "start_struct_type":
 			struct_types.append(info)
 		elif info["info_type"] == "tag_type":
-			tag_types.append(info)
+			is_self_referential = False
+			for infox in reversed(parent_stack):
+				if infox["info_type"] == "start_struct_type":
+					if infox["id"] == info["id"]:
+						is_self_referential = True
+						break
+				elif infox["info_type"] == "typdef":
+					if infox["name"] == info["name"]:
+						is_self_referential = True
+						break
+			if not is_self_referential:
+				tag_types.append(info)
 	for x in ar:
-		walk_dispatch(x, cb)
+		walk_dispatch(x, None, cb)
 		for info in struct_types:
 			if not ("tag" in info):
 				id_to_struct[info["id"]] = info
@@ -455,15 +477,33 @@ def move_named_structures_to_typedefs(ar):
 	id_to_struct = {}
 	id_to_typedef_name = {}
 	id_to_typedef = {}
-	def cb(info):
+	parent_stack = []
+	def cb(info, parent):
+		if info == None:
+			if parent != None:
+				parent_stack.append(parent)
+			else:
+				parent_stack.pop()
+			return
 		if info["info_type"] == "typdef":
 			typdefs.append(info)
 		elif info["info_type"] == "start_struct_type":
 			struct_types.append(info)
 		elif info["info_type"] == "tag_type":
-			tag_types.append(info)
+			is_self_referential = False
+			for infox in reversed(parent_stack):
+				if infox["info_type"] == "start_struct_type":
+					if infox["id"] == info["id"]:
+						is_self_referential = True
+						break
+				elif infox["info_type"] == "typdef":
+					if infox["name"] == info["name"]:
+						is_self_referential = True
+						break
+			if not is_self_referential:
+				tag_types.append(info)
 	for x in ar:
-		walk_dispatch(x, cb)
+		walk_dispatch(x, None, cb)
 		for info in struct_types:
 			if ("tag" in info):
 				id_to_struct[info["id"]] = info
@@ -537,9 +577,78 @@ def write_pr_dispatch(ar, wf):
 def write_idc_types(ar, wf):
 	block_depth = 0
 	func_queue = []
-	builtin_typedef_queue = []
-	trivial_typedef_queue = []
+	type_queue = []
 	other_queue = []
+
+	arr_deps = []
+	provides_arr = []
+	dependencies_arr = []
+	def cb(info, parent):
+		if info == None:
+			return
+		if info["info_type"] == "enum_type":
+			if (len(info["names"]) == 2 and info["names"][0][0] == "False" and info["names"][1][0] == "True" and info["names"][0][1] == 0 and info["names"][1][1] == 1):
+				return
+			if "tag" in info:
+				provide_to_add = "enum " + info["tag"]
+				if provide_to_add not in provides_arr:
+					provides_arr.append(provide_to_add)
+		elif info["info_type"] == "start_struct_type":
+			provide_to_add = ("struct" if info["structp"] else "union") + " " + (info["tag"] if "tag" in info else ("__anon_struct_%u" % (info["id"])))
+			if provide_to_add not in provides_arr:
+				provides_arr.append(provide_to_add)
+		elif info["info_type"] == "typedef_type":
+			dependency_to_add = info["name"]
+			if dependency_to_add not in dependencies_arr:
+				dependencies_arr.append(dependency_to_add)
+		elif info["info_type"] == "tag_type":
+			dependency_to_add = info["kind"] + " " + (info["name"] if "name" in info else ("__anon_struct_%u" % (info["id"])))
+			if dependency_to_add not in dependencies_arr:
+				dependencies_arr.append(dependency_to_add)
+		elif info["info_type"] == "typdef":
+			provide_to_add = info["name"]
+			if provide_to_add not in provides_arr:
+				provides_arr.append(provide_to_add)
+		elif info["info_type"] == "typed_constant":
+			dependency_to_add = info["type"]
+			if dependency_to_add not in dependencies_arr:
+				dependencies_arr.append(dependency_to_add)
+	for i in range(len(ar)):
+		x = ar[i]
+		provides_arr = []
+		dependencies_arr = []
+		walk_dispatch(x, None, cb)
+		if len(provides_arr) > 0:
+			dic = {}
+			dic["provides"] = sorted(provides_arr)
+			dic["dependencies"] = sorted(dependencies_arr)
+			dic["index"] = i
+			arr_deps.append(dic)
+	resolved_dep_list = []
+
+	resolved_dep_indices = []
+
+	last_item_len = 0
+	while len(arr_deps) != last_item_len:
+		last_item_len = len(arr_deps)
+		items_to_remove = []
+		for i in range(len(arr_deps)):
+			dep = arr_deps[i]
+			dep_resolved = True
+			for dependency in dep["dependencies"]:
+				if (dependency not in resolved_dep_list) and (dependency not in dep["provides"]):
+					dep_resolved = False
+			if dep_resolved:
+				items_to_remove.append(i)
+				for provide in dep["provides"]:
+					resolved_dep_list.append(provide)
+				resolved_dep_indices.append(dep["index"])
+		for i in reversed(items_to_remove):
+			del arr_deps[i]
+
+	if last_item_len != 0:
+		print("Warning: Unresolved typedefs detected")
+
 	wf.write("#include <idc.idc>\nstatic main(void) {\n")
 	start_addr = 0
 	end_addr = 0
@@ -554,21 +663,23 @@ def write_idc_types(ar, wf):
 			if x["info_type"] == "variable":
 				if x["static"]:
 					idc_txt = idc_dispatch(x)
-					other_queue.append(idc_txt)
+					if idc_txt != "":
+						other_queue.append(idc_txt)
 		elif block_depth == 0:
+			if x["info_type"] not in ["typdef", "tag"]:
+				idc_txt = idc_dispatch(x)
+				if idc_txt != "":
+					if x["info_type"] == "start_function":
+						func_queue.append(idc_txt)
+					else:
+						other_queue.append(idc_txt)
+	for i in resolved_dep_indices:
+		x = ar[i]
+		if x["info_type"] in ["typdef", "tag"]:
 			idc_txt = idc_dispatch(x)
-			if x["info_type"] == "start_function":
-				func_queue.append(idc_txt)
-			elif x["info_type"] == "typdef" and x["type"]["info_type"] == "typedef_type":
-				builtin_typedef_queue.append(idc_txt)
-			elif x["info_type"] == "typdef" and x["type"]["info_type"] == "tag_type":
-				trivial_typedef_queue.append(idc_txt)
-			else:
-				other_queue.append(idc_txt)
-	for x in builtin_typedef_queue:
-		wf.write(x)
-		wf.write("\n")
-	for x in trivial_typedef_queue:
+			if idc_txt != "":
+				type_queue.append(idc_txt)
+	for x in type_queue:
 		wf.write(x)
 		wf.write("\n")
 	for x in other_queue:
