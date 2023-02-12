@@ -109,8 +109,13 @@ def set_lvar_type_and_name(t, name, ea, filter_func=None):
     func = idaapi.get_func(ea)
     if func:
         ea = func.start_ea
-        cfunc = idaapi.decompile(ea)
+        cfunc = None
+        try:
+            cfunc = idaapi.decompile(ea)
+        except ida_hexrays.DecompilationFailure as e:
+            cfunc = None
         if not cfunc:
+            print("couldn't decompile func at {}".format(ea))
             return False
         in_lvars_ex = get_lvars_ex(cfunc)
         in_lvars = [n[0] for n in in_lvars_ex]
