@@ -441,7 +441,7 @@ def move_anonymous_structures_to_typedefs(ar):
 						is_self_referential = True
 						break
 				elif infox["info_type"] == "typdef":
-					if infox["name"] == info["name"]:
+					if "name" in info and infox["name"] == info["name"]:
 						is_self_referential = True
 						break
 			if not is_self_referential:
@@ -497,7 +497,7 @@ def move_named_structures_to_typedefs(ar):
 						is_self_referential = True
 						break
 				elif infox["info_type"] == "typdef":
-					if infox["name"] == info["name"]:
+					if "name" in info and infox["name"] == info["name"]:
 						is_self_referential = True
 						break
 			if not is_self_referential:
@@ -628,6 +628,8 @@ def write_idc_types(ar, wf):
 
 	resolved_dep_indices = []
 
+	resolved_dep_forward = []
+
 	last_item_len = 0
 	while len(arr_deps) != last_item_len:
 		last_item_len = len(arr_deps)
@@ -645,6 +647,31 @@ def write_idc_types(ar, wf):
 				resolved_dep_indices.append(dep["index"])
 		for i in reversed(items_to_remove):
 			del arr_deps[i]
+
+	if last_item_len != 0:
+		# Unresolved deps. Forward declare and try again
+		for dep in arr_deps:
+			for provide in dep["provides"]:
+				if provide.startswith("struct ") or provide.startswith("union "):
+					resolved_dep_list.append(provide)
+					resolved_dep_forward.append(provide + ";")
+		last_item_len = 0
+		while len(arr_deps) != last_item_len:
+			last_item_len = len(arr_deps)
+			items_to_remove = []
+			for i in range(len(arr_deps)):
+				dep = arr_deps[i]
+				dep_resolved = True
+				for dependency in dep["dependencies"]:
+					if (dependency not in resolved_dep_list) and (dependency not in dep["provides"]):
+						dep_resolved = False
+				if dep_resolved:
+					items_to_remove.append(i)
+					for provide in dep["provides"]:
+						resolved_dep_list.append(provide)
+					resolved_dep_indices.append(dep["index"])
+			for i in reversed(items_to_remove):
+				del arr_deps[i]
 
 	if last_item_len != 0:
 		print("Warning: Unresolved typedefs detected")
@@ -673,6 +700,9 @@ def write_idc_types(ar, wf):
 						func_queue.append(idc_txt)
 					else:
 						other_queue.append(idc_txt)
+	for x in resolved_dep_forward:
+		wf.write("ParseTypes(\"%s\", 0);" % (x))
+		wf.write("\n")
 	for i in resolved_dep_indices:
 		x = ar[i]
 		if x["info_type"] in ["typdef", "tag"]:
