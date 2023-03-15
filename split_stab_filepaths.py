@@ -34,7 +34,8 @@ def write_split_dispatch(ar, dt, basedir=None):
 					if addr in dt:
 						lastfile[1].append("\n".join(dt[addr]) + "\n")
 			else:
-				lastfile[1].append(json2pcode.pr_dispatch(x))
+				# lastfile[1].append(json2pcode.pr_dispatch(x))
+				pass
 	deposit_file()
 	for fn in allfile:
 		fn_split = fn.split("/")
@@ -45,6 +46,54 @@ def write_split_dispatch(ar, dt, basedir=None):
 			with open(basedir + "/" + fn_clean, "w") as wf2:
 				wf2.write("\n".join(allfile[fn]))
 				wf2.write("\n")
+
+def write_header_dispatch(wf, ar, dt):
+	block_depth = 0
+	lastfile = ["", []]
+	allfile = {}
+	def deposit_file():
+		if lastfile[0] != "":
+			if len(lastfile[1]) > 0:
+				allfile[lastfile[0]] = lastfile[1]
+				lastfile[1] = []
+			lastfile[0] = ""
+	for x in ar:
+		if x["info_type"] == "start_block":
+			block_depth += 1
+		elif x["info_type"] == "end_block":
+			block_depth -= 1
+		elif x["info_type"] == "start_compilation_unit":
+			deposit_file()
+			lastfile[0] = x["filename"]
+		elif x["info_type"] == "start_source":
+			deposit_file()
+			lastfile[0] = x["filename"]
+		elif x["info_type"] == "end_function":
+			pass
+		elif block_depth == 0:
+			if (x["info_type"] == "start_function"):
+				if ("addr" in x):
+					addr = x["addr"]
+					if addr in dt:
+						dt_v = "\n".join(dt[addr]) + "\n"
+						dt_v_header_end = dt_v.find("\n{\n")
+						if dt_v_header_end != -1:
+							lastfile[1].append("extern " + dt_v[:dt_v_header_end] + ";")
+						else:
+							print("??? not found")
+					else:
+						lastfile[1].append("// WARN NOT FOUND: " + x["name"])
+			else:
+				# lastfile[1].append(json2pcode.pr_dispatch(x))
+				pass
+	deposit_file()
+	for fn in allfile:
+		fn_split = fn.split("/")
+		fn_split = [x for x in fn_split if (x != "") and (x != "..") and (x != ".")]
+		fn_clean = "/".join(fn_split)
+		wf.write("\n// " + fn_clean + "\n\n")
+		wf.write("\n".join(allfile[fn]))
+		wf.write("\n")
 
 import re
 
@@ -84,3 +133,6 @@ if __name__ == "__main__":
 				split_decompiled_file(f, dt)
 			if len(sys.argv) > 3:
 				write_split_dispatch(ar, dt, sys.argv[3])
+			if len(sys.argv) > 4:
+				with open(sys.argv[4], "w") as wf:
+					write_header_dispatch(wf, ar, dt)
