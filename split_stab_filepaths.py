@@ -103,7 +103,7 @@ def split_decompiled_file(f, dt):
 	current_dat = []
 	current_addr = None
 	for line in f.readlines():
-		line = line.rstrip()
+		line = line.rstrip().decode(encoding="ASCII", errors="replace")
 		if current_addr == None:
 			line_addr_result = line_addr_re.match(line)
 			if line_addr_result:
@@ -129,7 +129,7 @@ if __name__ == "__main__":
 		json2pcode.derive_vararg_argument(ar)
 		if len(sys.argv) > 2:
 			dt = {}
-			with open(sys.argv[2], "r") as f:
+			with open(sys.argv[2], "rb") as f:
 				split_decompiled_file(f, dt)
 			if len(sys.argv) > 3:
 				write_split_dispatch(ar, dt, sys.argv[3])
