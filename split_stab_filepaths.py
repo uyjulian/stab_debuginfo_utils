@@ -6,13 +6,16 @@ import os
 
 def write_split_dispatch(ar, dt, basedir=None):
 	block_depth = 0
-	lastfile = ["", []]
+	lastfile = ["", [], []]
 	allfile = {}
+	file_prepend = lastfile[1]
+	file_apppend = lastfile[2]
 	def deposit_file():
 		if lastfile[0] != "":
-			if len(lastfile[1]) > 0:
-				allfile[lastfile[0]] = lastfile[1]
-				lastfile[1] = []
+			if len(file_apppend) > 0:
+				allfile[lastfile[0]] = [*file_prepend, *file_apppend]
+				del file_prepend[:]
+				del file_apppend[:]
 			lastfile[0] = ""
 	for x in ar:
 		if x["info_type"] == "start_block":
@@ -29,12 +32,21 @@ def write_split_dispatch(ar, dt, basedir=None):
 			pass
 		elif block_depth == 0:
 			if (x["info_type"] == "start_function"):
+				is_global = True
+				if ("global" in x):
+					if not x["global"]:
+						is_global = False
 				if ("addr" in x):
 					addr = x["addr"]
 					if addr in dt:
-						lastfile[1].append("\n".join(dt[addr]) + "\n")
+						if not is_global:
+							dt_v = "\n".join(dt[addr]) + "\n"
+							dt_v_header_end = dt_v.find("\n{\n")
+							if dt_v_header_end != -1:
+								file_prepend.append("static " + dt_v[:dt_v_header_end] + ";")
+						file_apppend.append(("static " if not is_global else "") + "\n".join(dt[addr]) + "\n")
 			else:
-				# lastfile[1].append(json2pcode.pr_dispatch(x))
+				# file_apppend.append(json2pcode.pr_dispatch(x))
 				pass
 	deposit_file()
 	for fn in allfile:
@@ -72,7 +84,11 @@ def write_header_dispatch(wf, ar, dt):
 			pass
 		elif block_depth == 0:
 			if (x["info_type"] == "start_function"):
-				if ("addr" in x):
+				is_global = True
+				if ("global" in x):
+					if not x["global"]:
+						is_global = False
+				if (is_global) and ("addr" in x):
 					addr = x["addr"]
 					if addr in dt:
 						dt_v = "\n".join(dt[addr]) + "\n"
