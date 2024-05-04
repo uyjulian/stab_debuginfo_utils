@@ -1,9 +1,11 @@
 
 import idc
 import idaapi
+import ida_frame
 import ida_hexrays
 import ida_kernwin
 import ida_lines
+import ida_range
 import ida_typeinf
 import ida_nalt
 import json
@@ -279,6 +281,11 @@ if True:
 
             func_for_frame = idaapi.get_func(func_ea)
             func_attr_fpd = idc.get_func_attr(func_ea, idc.FUNCATTR_FPD)
+            r = ida_range.range_t()
+            ida_frame.get_frame_part(r, func_for_frame, ida_frame.FPC_SAVREGS)
+            range_fpc_savregs = r.end_ea - r.start_ea
+            range_fpc_savregs_start = r.start_ea
+            range_fpc_savregs_end = r.end_ea
 
             # print("Setting lvar at %x" % func_ea)
             def filterX(n, segmentation, ranges):
@@ -312,8 +319,7 @@ if True:
                                     if matc != None:
                                         stack_offset = int(matc.group(1), 16)
                                     if stack_offset != None:
-                                        # For some reason, stack offset is substracted by 8
-                                        stack_offset -= 8
+                                        stack_offset -= range_fpc_savregs
                                         stack_offset -= func_attr_fpd
                                         if stack_offset == ab_to_find:
                                             return True
