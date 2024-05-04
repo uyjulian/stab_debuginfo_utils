@@ -246,7 +246,7 @@ register_int_to_name = {
 }
 
 if True:
-    is_interactive_mode = True
+    is_interactive_mode = len(idc.ARGV) == 0
     # primitives = ['bool', 'double', 'float', 'int', 'long long', 'long', 'short', 'signed char', 'unsigned char', 'unsigned int', 'unsigned long long', 'unsigned long', 'unsigned short', 'void']
     x = None
     if is_interactive_mode:
