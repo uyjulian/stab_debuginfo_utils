@@ -306,6 +306,12 @@ if True:
                     if addr not in addr_to_symbol:
                         addr_to_symbol[addr] = name
 
+        addr_offset = 0
+        for segment in elffile.iter_segments():
+            if segment["p_type"] == "PT_LOAD":
+                addr_offset = segment["p_vaddr"]
+                break
+
         if isinstance(mdebugsect, Section):
             g = io.BytesIO(mdebugsect.data())
             hdrr = read_hdrr(g)
@@ -367,7 +373,7 @@ if True:
                                         so_encountered += 1
                                     else:
                                         # XXX: check if offset 0 is actually null string
-                                        wf.write(struct.pack("<IBBHI", 0, 0x64, 0, 0, largest_addr))
+                                        wf.write(struct.pack("<IBBHI", 0, 0x64, 0, 0, largest_addr + addr_offset))
                                 if (stab_ntype_table[stab_unmarked] == "STSYM") and (bracket_depth != 0):
                                     # Value is offset from some section, figure out which section it is.
                                     strrr_symbol = strrr
@@ -414,6 +420,8 @@ if True:
                                 if stab_ntype_table[stab_unmarked] in ["FUN", "SO"]:
                                     if value > largest_addr:
                                         largest_addr = value
+                                if stab_ntype_table[stab_unmarked] in ["FUN", "SO"]:
+                                    value += addr_offset
                             # if (stab_ntype_table[stab_unmarked] in ["LBRAC", "RBRAC"]):
                             #     offs = fdr["issBase"]
 
@@ -425,7 +433,7 @@ if True:
                 if bracket_depth != 0:
                     raise Exception("XXX: bracket depth should be 0 at exit!")
                 # XXX: check if offset 0 is actually null string
-                wf.write(struct.pack("<IBBHI", 0, 0x64, 0, 0, largest_addr))
+                wf.write(struct.pack("<IBBHI", 0, 0x64, 0, 0, largest_addr + addr_offset))
         else:
             stabsect_name = ".stab"
             stabsect = elffile.get_section_by_name(stabsect_name)
