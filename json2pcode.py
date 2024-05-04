@@ -374,7 +374,10 @@ def idc_tag(info, name):
 
 def idc_variable(info, name):
 	# return "set_name(0x%08x,\"%s\");SetType(0x%08x,\"%s\");" % (info["ab"], info["name"], info["ab"], pr_variable(info, name))
-	return "SetType(0x%08x,\"%s\");" % (info["ab"], pr_variable(info, name))
+	cur_addr_getter = "0x%08x" % (info["ab"])
+	if not info["static"]:
+		cur_addr_getter = "get_name_ea(BADADDR, \"%s\")" % (info["name"])
+	return "SetType(%s,\"%s\");" % (cur_addr_getter, pr_variable(info, name))
 
 def idc_start_function(info, name):
 	# return "add_func(0x%08x);set_name(0x%08x,\"%s\");SetType(0x%08x,\"%s\");" % (info["addr"], info["addr"], info["name"], info["addr"], pr_start_function(info, name))
