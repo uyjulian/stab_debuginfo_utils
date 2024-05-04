@@ -1,4 +1,5 @@
 
+import idc
 import idaapi
 import ida_hexrays
 import ida_kernwin
@@ -276,7 +277,8 @@ if True:
             # if type_to_set in primitives:
             #     type_to_set = None
 
-            frame_sz = idaapi.get_frame_size(idaapi.get_func(func_ea))
+            func_for_frame = idaapi.get_func(func_ea)
+            func_attr_fpd = idc.get_func_attr(func_ea, idc.FUNCATTR_FPD)
 
             # print("Setting lvar at %x" % func_ea)
             def filterX(n, segmentation, ranges):
@@ -312,6 +314,7 @@ if True:
                                     if stack_offset != None:
                                         # For some reason, stack offset is substracted by 8
                                         stack_offset -= 8
+                                        stack_offset -= func_attr_fpd
                                         if stack_offset == ab_to_find:
                                             return True
                         else:
