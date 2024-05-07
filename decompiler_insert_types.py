@@ -8,6 +8,7 @@ import ida_lines
 import ida_range
 import ida_typeinf
 import ida_nalt
+import idautils
 import json
 import re
 
@@ -266,36 +267,46 @@ if True:
 
     register_int_to_name_arch = register_int_to_name[arch]
 
+    d = []
     with open(x, "r") as f:
         d = json.load(f)
-        for d1 in d:
-            var_type = d1[0]
-            func_ea = d1[1]
-            range_start_ea = d1[2]
-            range_end_ea = d1[3]
-            type_to_set = d1[4]
-            name_to_set = d1[5]
-            ab_to_find = d1[6]
-            # if type_to_set in primitives:
-            #     type_to_set = None
+    info_by_func = {}
+    for d1 in d:
+        dic = {}
+        dic["var_type"] = d1[0]
+        dic["func_ea"] = d1[1]
+        dic["range_start_ea"] = d1[2]
+        dic["range_end_ea"] = d1[3]
+        dic["type_to_set"] = d1[4]
+        dic["name_to_set"] = d1[5]
+        dic["ab_to_find"] = d1[6]
+        if dic["func_ea"] not in info_by_func:
+            info_by_func[dic["func_ea"]] = []
+        info_by_func[dic["func_ea"]].append(dic)
+    for ea in sorted([j for i in [[funcea for funcea in idautils.Functions(segea, idc.get_segm_end(segea))] for segea in idautils.Segments()] for j in i]):
+        if ea not in info_by_func:
+            continue
+        for dic in info_by_func[ea]:
+            # if dic["type_to_set"] in primitives:
+            #     dic["type_to_set"] = None
 
-            func_for_frame = idaapi.get_func(func_ea)
-            func_attr_fpd = idc.get_func_attr(func_ea, idc.FUNCATTR_FPD)
+            func_for_frame = idaapi.get_func(ea)
+            func_attr_fpd = idc.get_func_attr(ea, idc.FUNCATTR_FPD)
             r = ida_range.range_t()
             ida_frame.get_frame_part(r, func_for_frame, ida_frame.FPC_SAVREGS)
             range_fpc_savregs = r.end_ea - r.start_ea
             range_fpc_savregs_start = r.start_ea
             range_fpc_savregs_end = r.end_ea
 
-            # print("Setting lvar at %x" % func_ea)
+            # print("Setting lvar at %x" % ea)
             def filterX(n, segmentation, ranges):
                 if n.is_arg_var or (n.name == ""):
                     return False
                 if ranges != None:
                     # Check if range of bounds
-                    if ranges[0] < range_start_ea:
+                    if ranges[0] < dic["range_start_ea"]:
                         return False
-                    if ranges[1] > range_end_ea:
+                    if ranges[1] > dic["range_end_ea"]:
                         return False
                 # String parsing, unfortunately, because I couldn't find an easy way to get the ebp of the variable
                 slash_pos = segmentation.find("// ")
@@ -303,7 +314,7 @@ if True:
                     x_snip = segmentation[slash_pos + 3:]
                     if len(x_snip) > 0:
                         if x_snip[0] == "[":
-                            if var_type == "stkoff":
+                            if dic["var_type"] == "stkoff":
                                 # stack variable
                                 if arch == "i386":
                                     matc = i386_stack_match.search(x_snip)
@@ -311,7 +322,7 @@ if True:
                                     if matc != None:
                                         stack_offset = int(matc.group(1), 16)
                                     if stack_offset != None:
-                                        if stack_offset == ab_to_find:
+                                        if stack_offset == dic["ab_to_find"]:
                                             return True
                                 elif arch == "mips":
                                     matc = mips_stack_match.search(x_snip)
@@ -321,23 +332,23 @@ if True:
                                     if stack_offset != None:
                                         stack_offset -= range_fpc_savregs
                                         stack_offset -= func_attr_fpd
-                                        if stack_offset == ab_to_find:
+                                        if stack_offset == dic["ab_to_find"]:
                                             return True
                         else:
-                            if var_type == "reg1":
+                            if dic["var_type"] == "reg1":
                                 # register variable
                                 space_pos = x_snip.find(" ")
                                 x_snip_2 = x_snip
                                 if space_pos != -1:
                                     x_snip_2 = x_snip[:space_pos]
                                 if x_snip_2 in register_int_to_name_arch:
-                                    if register_int_to_name_arch[x_snip_2] == ab_to_find:
+                                    if register_int_to_name_arch[x_snip_2] == dic["ab_to_find"]:
                                         return True
                 return False
-            res = set_lvar_type_and_name(type_to_set, name_to_set, func_ea, filterX)
+            res = set_lvar_type_and_name(dic["type_to_set"], dic["name_to_set"], ea, filterX)
             # if not res:
             #     break
-            # if var_type == "stkoff":
+            # if dic["var_type"] == "stkoff":
             #     break
     if not is_interactive_mode:
         idaapi.qexit(0)
