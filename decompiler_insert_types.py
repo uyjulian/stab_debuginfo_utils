@@ -87,14 +87,24 @@ def get_lvars_ex(cfunc):
         retval.append([lvars_list[x], segmentations_map[x], ranges[x] if x in ranges else None])
     return retval
 
-def set_lvar_type_and_name(t, name, ea, filter_func=None):
+def set_lvar_type_and_name(in_type_name_pairs, ea, filter_func=None):
     has_type = True
-    orig_t = t
-    if isinstance(t, str):
-        tif = idaapi.tinfo_t()
-        decl_res = ida_typeinf.parse_decl(tif, None, t + ";", 0)
-        if decl_res == None:
-            t = None
+    type_name_pairs = []
+    for type_name_pair in in_type_name_pairs:
+        t = type_name_pair[0]
+        if isinstance(t, str):
+            tif = idaapi.tinfo_t()
+            decl_res = ida_typeinf.parse_decl(tif, None, t + ";", 0)
+            if decl_res != None:
+                t = ida_typeinf.tinfo_t(tif)
+            else:
+                t = None
+        dic = {}
+        dic["type"] = type_name_pair[0]
+        dic["name"] = type_name_pair[1]
+        dic["t_tinfo"] = t
+        dic["index"] = in_type_name_pairs.index(type_name_pair)
+        type_name_pairs.append(dic)
 
     def make_unique_name(name, taken):
         if name not in taken:
@@ -122,41 +132,78 @@ def set_lvar_type_and_name(t, name, ea, filter_func=None):
             print("couldn't decompile func at {}".format(ea))
             return False
         in_lvars_ex = get_lvars_ex(cfunc)
-        in_lvars = [n[0] for n in in_lvars_ex]
-        lvars = [n[0] for n in in_lvars_ex if filter_func(n[0], n[1], n[2])]
+        lvars = [n[0] for n in in_lvars_ex]
+        lvars_nameinfo = {}
+        lvars_wantedinfo = {}
         # To handle the possibility of variables at different ranges, handle them all
-        lvar_count = 0
         for lvar in lvars:
-            new_name = None
-            new_type = None
-            if name != None and lvar.name != name:
-                name_to_use = name
-                if lvar_count != 0:
-                    name_to_use += "_%d" % lvar_count
-                names = [n.name for n in in_lvars]
-                if name_to_use in names:
-                    name_to_use = make_unique_name(name_to_use, names)
-                print("changing name of {} to {}".format(lvar.name, name_to_use))
-                new_name = name_to_use
-            if t != None:
-                print("changing type of {} to {}: {}".format(lvar.name, t, orig_t))
-                new_type = ida_typeinf.tinfo_t(tif)
-            lvar_count += 1
-            if new_name != None or new_type != None:
-                lsi = ida_hexrays.lvar_saved_info_t()
-                lsi.ll = lvar
-                modify_flags = 0
-                if new_name != None:
-                    lsi.name = new_name
-                    modify_flags |= ida_hexrays.MLI_NAME
-                if new_type != None:
-                    lsi.type = new_type
-                    modify_flags |= ida_hexrays.MLI_TYPE
-                if not ida_hexrays.modify_user_lvar_info(ea, modify_flags, lsi):
-                    print("unable to modify user lvar info")
-                    res = False
-        if len(lvars) == 0:
-            print("couldn't find {} at {}".format(name, ea))
+            lvar_i = lvars.index(lvar)
+            lvar_name = lvar.name
+            lvars_nameinfo[lvar_name] = lvar_i
+        for type_name_pair in type_name_pairs:
+            t_index = type_name_pair["index"]
+            name = type_name_pair["name"]
+            t = type_name_pair["type"]
+            t_tinfo = type_name_pair["t_tinfo"]
+            filtered_lvars_i = [lvars.index(n[0]) for n in in_lvars_ex if filter_func(t_index, n[0], n[1], n[2])]
+            for lvar_i in filtered_lvars_i:
+                lvar = lvars[lvar_i]
+                new_name = None
+                new_type = None
+                if name != None and lvar.name != name:
+                    new_name = name
+                if t != None:
+                    new_type = t_tinfo
+                if new_name != None or new_type != None:
+                    if lvar_i not in lvars_wantedinfo:
+                        lvars_wantedinfo[lvar_i] = []
+                    dic = {}
+                    if new_name != None:
+                        dic["name"] = new_name
+                    if new_type != None:
+                        dic["type"] = new_type
+                        dic["typename"] = t
+                    lvars_wantedinfo[lvar_i].append(dic)
+            if len(filtered_lvars_i) == 0:
+                print("couldn't find {} at {}".format(name, ea))
+        lvars_wantednameinfo = {}
+        for lvar_i in sorted(lvars_wantedinfo):
+            dic = lvars_wantedinfo[lvar_i][-1]
+            new_name = dic["name"] if "name" in dic else None
+            if new_name != None:
+                if (new_name in lvars_nameinfo) or (new_name in lvars_wantednameinfo):
+                    new_name += "_v%d" % lvar_i
+                if (new_name in lvars_nameinfo) or (new_name in lvars_wantednameinfo):
+                    new_name = make_unique_name(new_name, lvars_nameinfo.keys())
+                lvars_wantednameinfo[new_name] = lvar_i
+                dic["name"] = new_name
+        for lvar_i in sorted(lvars_wantedinfo):
+            dic = lvars_wantedinfo[lvar_i][-1]
+            lvar = lvars[lvar_i]
+            old_name = lvar.name
+            new_name = dic["name"] if "name" in dic else None
+            new_type = dic["type"] if "type" in dic else None
+            new_typename = dic["typename"] if "typename" in dic else None
+            lsi = ida_hexrays.lvar_saved_info_t()
+            lsi.ll = lvar
+            modify_flags = 0
+            if new_name != None:
+                lsi.name = new_name
+                modify_flags |= ida_hexrays.MLI_NAME
+                print("changing name of {} to {}".format(old_name, new_name))
+            if new_type != None:
+                lsi.type = new_type
+                modify_flags |= ida_hexrays.MLI_TYPE
+                print("changing type of {} to {}".format(old_name, new_typename))
+            if ida_hexrays.modify_user_lvar_info(ea, modify_flags, lsi):
+                if old_name in lvars_nameinfo:
+                    del lvars_nameinfo[old_name]
+                lvars_nameinfo[new_name] = lvar_i
+            else:
+                print("unable to modify user lvar info")
+                res = False
+        if len(lvars_wantedinfo) == 0:
+            print("couldn't find any vars to set at {}".format(ea))
             res = False
         if res == True:
             ida_hexrays.mark_cfunc_dirty(ea, False)
@@ -286,7 +333,11 @@ if True:
     for ea in sorted([j for i in [[funcea for funcea in idautils.Functions(segea, idc.get_segm_end(segea))] for segea in idautils.Segments()] for j in i]):
         if ea not in info_by_func:
             continue
-        for dic in info_by_func[ea]:
+        func_info = info_by_func[ea]
+        type_name_pairs = []
+        for dic in func_info:
+            type_name_pairs.append([dic["type_to_set"], dic["name_to_set"]])
+        if True:
             # if dic["type_to_set"] in primitives:
             #     dic["type_to_set"] = None
 
@@ -299,7 +350,8 @@ if True:
             range_fpc_savregs_end = r.end_ea
 
             # print("Setting lvar at %x" % ea)
-            def filterX(n, segmentation, ranges):
+            def filterX(t_index, n, segmentation, ranges):
+                dic = func_info[t_index]
                 if n.is_arg_var or (n.name == ""):
                     return False
                 if ranges != None:
@@ -345,7 +397,7 @@ if True:
                                     if register_int_to_name_arch[x_snip_2] == dic["ab_to_find"]:
                                         return True
                 return False
-            res = set_lvar_type_and_name(dic["type_to_set"], dic["name_to_set"], ea, filterX)
+            res = set_lvar_type_and_name(type_name_pairs, ea, filterX)
             # if not res:
             #     break
             # if dic["var_type"] == "stkoff":
