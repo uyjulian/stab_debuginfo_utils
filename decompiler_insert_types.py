@@ -340,6 +340,11 @@ if True:
         if dic["func_ea"] not in info_by_func:
             info_by_func[dic["func_ea"]] = []
         info_by_func[dic["func_ea"]].append(dic)
+    def sort_areasize(dic):
+        return dic["range_end_ea"] - dic["range_start_ea"]
+    for ea in info_by_func:
+        func_info = info_by_func[ea]
+        func_info.sort(key=sort_areasize, reverse=True)
     for ea in sorted([j for i in [[funcea for funcea in idautils.Functions(segea, idc.get_segm_end(segea))] for segea in idautils.Segments()] for j in i]):
         if ea not in info_by_func:
             continue
