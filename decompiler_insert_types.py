@@ -161,7 +161,8 @@ def set_lvar_type_and_name(in_type_name_pairs, ea, filter_func=None):
                 new_type = None
                 if name != None and lvar.name != name:
                     new_name = name
-                if t != None:
+                lvar_type = lvar.type()
+                if t != None and (True if lvar_type == None else (lvar_type.dstr() != t)):
                     new_type = t_tinfo
                 if new_name != None or new_type != None:
                     if lvar_i not in lvars_wantedinfo:
