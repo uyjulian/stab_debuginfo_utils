@@ -17,18 +17,27 @@ mips_stack_match = re.compile('\\[([\\-\\+].*?)h\\]')
 idati = idaapi.get_idati()
 
 class lvar_range_finder_t(ida_hexrays.ctree_visitor_t):
-    def __init__(self):
+    def __init__(self, cfunc):
         ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_FAST)
 
         self.ranges = {}
+        self.cfunc = cfunc
         return
+
+    def get_var_ea(self, cfunc, i):
+        parent = i
+        while parent:
+            if parent and parent.ea != ida_idaapi.BADADDR:
+                return parent.ea
+            parent = cfunc.body.find_parent_of(parent)
+        return ida_idaapi.BADADDR
 
     def visit_expr(self, e):
         try:
             if e.op == ida_hexrays.cot_var:
                 idx = e.v.idx
                 ranges = self.ranges
-                ea = e.ea
+                ea = self.get_var_ea(self.cfunc, e)
                 if ea != ida_idaapi.BADADDR:
                     if idx not in ranges:
                         ranges[idx] = [None, None]
@@ -76,7 +85,7 @@ def get_lvars_ex(cfunc):
             idx_end = None
     if len(segmentations) != len(datas):
         raise Exception("Couldn't associate lvars with segmented text")
-    itfinder = lvar_range_finder_t()
+    itfinder = lvar_range_finder_t(cfunc)
     itfinder.apply_to(cfunc.body, None)
     ranges = itfinder.ranges
     segmentations_map = {}
