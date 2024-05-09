@@ -57,6 +57,144 @@ class lvar_range_finder_t(ida_hexrays.ctree_visitor_t):
             pass
         return 0
 
+all_lval_types = [
+    ida_hexrays.cot_asg,
+    ida_hexrays.cot_asgbor,
+    ida_hexrays.cot_asgxor,
+    ida_hexrays.cot_asgband,
+    ida_hexrays.cot_asgadd,
+    ida_hexrays.cot_asgsub,
+    ida_hexrays.cot_asgmul,
+    ida_hexrays.cot_asgsshr,
+    ida_hexrays.cot_asgushr,
+    ida_hexrays.cot_asgshl,
+    ida_hexrays.cot_asgsdiv,
+    ida_hexrays.cot_asgudiv,
+    ida_hexrays.cot_asgsmod,
+    ida_hexrays.cot_asgumod,
+    ida_hexrays.cot_tern,
+    ida_hexrays.cot_lor,
+    ida_hexrays.cot_land,
+    ida_hexrays.cot_bor,
+    ida_hexrays.cot_xor,
+    ida_hexrays.cot_band,
+    ida_hexrays.cot_eq,
+    ida_hexrays.cot_ne,
+    ida_hexrays.cot_sge,
+    ida_hexrays.cot_uge,
+    ida_hexrays.cot_sle,
+    ida_hexrays.cot_ule,
+    ida_hexrays.cot_sgt,
+    ida_hexrays.cot_ugt,
+    ida_hexrays.cot_slt,
+    ida_hexrays.cot_ult,
+    ida_hexrays.cot_sshr,
+    ida_hexrays.cot_ushr,
+    ida_hexrays.cot_shl,
+    ida_hexrays.cot_add,
+    ida_hexrays.cot_sub,
+    ida_hexrays.cot_mul,
+    ida_hexrays.cot_sdiv,
+    ida_hexrays.cot_udiv,
+    ida_hexrays.cot_smod,
+    ida_hexrays.cot_umod,
+    ida_hexrays.cot_fadd,
+    ida_hexrays.cot_fsub,
+    ida_hexrays.cot_fmul,
+    ida_hexrays.cot_fdiv,
+    ida_hexrays.cot_fneg,
+    ida_hexrays.cot_neg,
+    ida_hexrays.cot_cast,
+    ida_hexrays.cot_lnot,
+    ida_hexrays.cot_bnot,
+    ida_hexrays.cot_ptr,
+    ida_hexrays.cot_ref,
+    ida_hexrays.cot_postinc,
+    ida_hexrays.cot_postdec,
+    ida_hexrays.cot_preinc,
+    ida_hexrays.cot_predec,
+    ida_hexrays.cot_call,
+    ida_hexrays.cot_idx,
+    ida_hexrays.cot_memref,
+    ida_hexrays.cot_memptr,
+]
+
+all_twoval_types = [
+    ida_hexrays.cot_asg,
+    ida_hexrays.cot_asgbor,
+    ida_hexrays.cot_asgxor,
+    ida_hexrays.cot_asgband,
+    ida_hexrays.cot_asgadd,
+    ida_hexrays.cot_asgsub,
+    ida_hexrays.cot_asgmul,
+    ida_hexrays.cot_asgsshr,
+    ida_hexrays.cot_asgushr,
+    ida_hexrays.cot_asgshl,
+    ida_hexrays.cot_asgsdiv,
+    ida_hexrays.cot_asgudiv,
+    ida_hexrays.cot_asgsmod,
+    ida_hexrays.cot_asgumod,
+    ida_hexrays.cot_tern,
+    ida_hexrays.cot_lor,
+    ida_hexrays.cot_land,
+    ida_hexrays.cot_bor,
+    ida_hexrays.cot_xor,
+    ida_hexrays.cot_band,
+    ida_hexrays.cot_eq,
+    ida_hexrays.cot_ne,
+    ida_hexrays.cot_sge,
+    ida_hexrays.cot_uge,
+    ida_hexrays.cot_sle,
+    ida_hexrays.cot_ule,
+    ida_hexrays.cot_sgt,
+    ida_hexrays.cot_ugt,
+    ida_hexrays.cot_slt,
+    ida_hexrays.cot_ult,
+    ida_hexrays.cot_sshr,
+    ida_hexrays.cot_ushr,
+    ida_hexrays.cot_shl,
+    ida_hexrays.cot_add,
+    ida_hexrays.cot_sub,
+    ida_hexrays.cot_mul,
+    ida_hexrays.cot_sdiv,
+    ida_hexrays.cot_udiv,
+    ida_hexrays.cot_smod,
+    ida_hexrays.cot_umod,
+    ida_hexrays.cot_fadd,
+    ida_hexrays.cot_fsub,
+    ida_hexrays.cot_fmul,
+    ida_hexrays.cot_fdiv,
+]
+
+class lvar_type_usage_t(ida_hexrays.ctree_visitor_t):
+    def __init__(self):
+        ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_PARENTS)
+
+        self.type_usage = {}
+        return
+
+    def visit_expr(self, e):
+        try:
+            if e.op == ida_hexrays.cot_var:
+                idx = e.v.idx
+                type_usage = self.type_usage
+                parent = self.parents.back()
+                if parent != None and parent.is_expr():
+                    parent_cexpr = parent.cexpr
+                    if parent_cexpr.op in all_lval_types and parent_cexpr.x == e:
+                        if idx not in type_usage:
+                            type_usage[idx] = []
+                        if parent_cexpr.op in all_twoval_types:
+                            if parent_cexpr.y.op == ida_hexrays.cot_cast:
+                                type_usage[idx].append(ida_typeinf.tinfo_t(parent_cexpr.y.x.type))
+                            else:
+                                type_usage[idx].append(ida_typeinf.tinfo_t(parent_cexpr.y.type))
+                        else:
+                            type_usage[idx].append(ida_typeinf.tinfo_t(parent_cexpr.type))
+        except:
+            pass
+        return 0
+
 
 def get_lvars_ex(cfunc):
     ccode = cfunc.get_pseudocode()
@@ -96,12 +234,15 @@ def get_lvars_ex(cfunc):
     itfinder.apply_to(cfunc.body, None)
     ranges_usage = itfinder.ranges_usage
     ranges_assignment = itfinder.ranges_assignment
+    typefinder = lvar_type_usage_t()
+    typefinder.apply_to(cfunc.body, None)
+    type_usage = typefinder.type_usage
     segmentations_map = {}
     retval = []
     for i in range(len(segmentations)):
         segmentations_map[datas[i]] = segmentations[i]
     for x in sorted(segmentations_map.keys()):
-        retval.append([lvars_list[x], segmentations_map[x], ranges_usage[x] if x in ranges_usage else (ranges_assignment[x] if x in ranges_assignment else None)])
+        retval.append([lvars_list[x], segmentations_map[x], ranges_usage[x] if x in ranges_usage else (ranges_assignment[x] if x in ranges_assignment else None), type_usage[x] if x in type_usage else None])
     return retval
 
 def set_lvar_type_and_name(in_type_name_pairs, ea, filter_func=None):
@@ -168,10 +309,9 @@ def set_lvar_type_and_name(in_type_name_pairs, ea, filter_func=None):
                 lvar = lvars[lvar_i]
                 new_name = None
                 new_type = None
-                if name != None and lvar.name != name:
+                if name != None:
                     new_name = name
-                lvar_type = lvar.type()
-                if t != None and (True if lvar_type == None else (lvar_type.dstr() != t)):
+                if t != None:
                     new_type = t_tinfo
                 if new_name != None or new_type != None:
                     if lvar_i not in lvars_wantedinfo:
@@ -185,15 +325,73 @@ def set_lvar_type_and_name(in_type_name_pairs, ea, filter_func=None):
                     lvars_wantedinfo[lvar_i].append(dic)
             if len(filtered_lvars_i) == 0:
                 print("couldn't find {} at {}".format(name, ea))
+        def sort_typescore(x):
+            return x[1]
+        for lvar_i in sorted(lvars_wantedinfo):
+            dics = lvars_wantedinfo[lvar_i]
+            if len(dics) > 1 and in_lvars_ex[lvar_i][3] != None:
+                cur_used_types = [til.dstr() for til in in_lvars_ex[lvar_i][3]]
+                type_score = {}
+                for dic_i in range(len(dics)):
+                    dic = dics[dic_i]
+                    new_type = dic["type"] if "type" in dic else None
+                    if new_type != None:
+                        type_score[dic_i] = cur_used_types.count(new_type.dstr())
+                type_score_arr = [[x, type_score[x]] for x in type_score]
+                type_score_arr.sort(key=sort_typescore, reverse=True)
+                if len(type_score_arr) > 0:
+                    dic_tmp = dics[type_score_arr[0][0]]
+                    del dics[:]
+                    dics.append(dic_tmp)
+                else:
+                    cur_used_types = [til for til in in_lvars_ex[lvar_i][3]]
+                    cast_score = {}
+                    for dic_i in range(len(dics)):
+                        dic = dics[dic_i]
+                        new_type = dic["type"] if "type" in dic else None
+                        if new_type != None:
+                            cur_score = 0
+                            for used_type in cur_used_types:
+                                cur_score += 1 if new_type.is_castable_to(used_type) else 0
+                            cast_score[dic_i] = cur_score
+                    type_score_arr = [[x, cast_score[x]] for x in cast_score]
+                    type_score_arr.sort(key=sort_typescore, reverse=True)
+                    if len(type_score_arr) > 0:
+                        dic_tmp = dics[type_score_arr[0][0]]
+                        del dics[:]
+                        dics.append(dic_tmp)
+        for lvar_i in sorted(lvars_wantedinfo):
+            lvar = lvars[lvar_i]
+            dics = lvars_wantedinfo[lvar_i]
+            for dic in dics:
+                if "name" in dic and lvar.name == dic["name"]:
+                    del dic["name"]
+                lvar_type = lvar.type()
+                if "typename" in dic and (False if lvar_type == None else (lvar_type.dstr() == dic["typename"])):
+                    del dic["type"]
+                    del dic["typename"]
+            dics_pruned = [dic for dic in dics if "name" in dic or "type" in dic]
+            if len(dics_pruned) == 0:
+                del lvars_wantedinfo[lvar_i]
         lvars_wantednameinfo = {}
         for lvar_i in sorted(lvars_wantedinfo):
+            lvar = lvars[lvar_i]
             dic = lvars_wantedinfo[lvar_i][-1]
             new_name = dic["name"] if "name" in dic else None
-            if new_name != None:
-                if (new_name in lvars_nameinfo) or (new_name in lvars_wantednameinfo):
-                    new_name += "_v%d" % lvar_i
-                if (new_name in lvars_nameinfo) or (new_name in lvars_wantednameinfo):
-                    new_name = make_unique_name(new_name, lvars_nameinfo.keys())
+            if (new_name != None) and ((new_name in lvars_nameinfo) or (new_name in lvars_wantednameinfo)):
+                new_name += "_v%d" % lvar_i
+            if (new_name != None) and (lvar.name == new_name):
+                new_name = None
+            if (new_name != None) and ((new_name in lvars_nameinfo) or (new_name in lvars_wantednameinfo)):
+                new_name = make_unique_name(new_name, lvars_nameinfo.keys())
+            if (new_name != None) and (lvar.name == new_name):
+                new_name = None
+            if new_name == None:
+                if "name" in dic:
+                    del dic["name"]
+                    if "type" not in dic:
+                        del lvars_wantedinfo[lvar_i]
+            else:
                 lvars_wantednameinfo[new_name] = lvar_i
                 dic["name"] = new_name
         for lvar_i in sorted(lvars_wantedinfo):
