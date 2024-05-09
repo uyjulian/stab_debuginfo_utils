@@ -17,19 +17,20 @@ mips_stack_match = re.compile('\\[([\\-\\+].*?)h\\]')
 idati = idaapi.get_idati()
 
 class lvar_range_finder_t(ida_hexrays.ctree_visitor_t):
-    def __init__(self, cfunc):
-        ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_FAST)
+    def __init__(self):
+        ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_PARENTS)
 
         self.ranges = {}
-        self.cfunc = cfunc
         return
 
-    def get_var_ea(self, cfunc, i):
-        parent = i
-        while parent:
-            if parent and parent.ea != ida_idaapi.BADADDR:
-                return parent.ea
-            parent = cfunc.body.find_parent_of(parent)
+    def get_cur_expr_ea(self):
+        i = self.parents.size() - 1
+        parent = self.parents.at(i)
+        while i >= 0 and (parent.is_expr() or parent.op == ida_hexrays.cit_expr):
+            if parent.cexpr.ea != ida_idaapi.BADADDR:
+                return parent.cexpr.ea
+            i -= 1
+            parent = self.parents.at(i)
         return ida_idaapi.BADADDR
 
     def visit_expr(self, e):
@@ -37,7 +38,7 @@ class lvar_range_finder_t(ida_hexrays.ctree_visitor_t):
             if e.op == ida_hexrays.cot_var:
                 idx = e.v.idx
                 ranges = self.ranges
-                ea = self.get_var_ea(self.cfunc, e)
+                ea = self.get_cur_expr_ea()
                 if ea != ida_idaapi.BADADDR:
                     if idx not in ranges:
                         ranges[idx] = [None, None]
@@ -85,7 +86,7 @@ def get_lvars_ex(cfunc):
             idx_end = None
     if len(segmentations) != len(datas):
         raise Exception("Couldn't associate lvars with segmented text")
-    itfinder = lvar_range_finder_t(cfunc)
+    itfinder = lvar_range_finder_t()
     itfinder.apply_to(cfunc.body, None)
     ranges = itfinder.ranges
     segmentations_map = {}
