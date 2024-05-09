@@ -207,7 +207,7 @@ def pr_pointer_type(info, name):
 def pr_function_type(info, name):
 	if "arguments" in info:
 		return "/* TODO: function type with arguments */"
-	return "%s (%s)()" % (pr_dispatch(info["type"]), name)
+	return "%s (%s)(int fxme1, int fxme2, int fxme3, int fxme4)" % (pr_dispatch(info["type"]), name)
 
 def pr_array_type(info, name):
 	lower = info["lower"]
