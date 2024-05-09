@@ -100,7 +100,8 @@ def get_lvars_ex(cfunc):
 def set_lvar_type_and_name(in_type_name_pairs, ea, filter_func=None):
     has_type = True
     type_name_pairs = []
-    for type_name_pair in in_type_name_pairs:
+    for i in range(len(in_type_name_pairs)):
+        type_name_pair = in_type_name_pairs[i]
         t = type_name_pair[0]
         if isinstance(t, str):
             tif = idaapi.tinfo_t()
@@ -113,7 +114,7 @@ def set_lvar_type_and_name(in_type_name_pairs, ea, filter_func=None):
         dic["type"] = type_name_pair[0]
         dic["name"] = type_name_pair[1]
         dic["t_tinfo"] = t
-        dic["index"] = in_type_name_pairs.index(type_name_pair)
+        dic["index"] = i
         type_name_pairs.append(dic)
 
     def make_unique_name(name, taken):
@@ -146,16 +147,16 @@ def set_lvar_type_and_name(in_type_name_pairs, ea, filter_func=None):
         lvars_nameinfo = {}
         lvars_wantedinfo = {}
         # To handle the possibility of variables at different ranges, handle them all
-        for lvar in lvars:
-            lvar_i = lvars.index(lvar)
+        for i in range(len(lvars)):
+            lvar = lvars[i]
             lvar_name = lvar.name
-            lvars_nameinfo[lvar_name] = lvar_i
+            lvars_nameinfo[lvar_name] = i
         for type_name_pair in type_name_pairs:
             t_index = type_name_pair["index"]
             name = type_name_pair["name"]
             t = type_name_pair["type"]
             t_tinfo = type_name_pair["t_tinfo"]
-            filtered_lvars_i = [lvars.index(n[0]) for n in in_lvars_ex if filter_func(t_index, n[0], n[1], n[2])]
+            filtered_lvars_i = [i for i in range(len(in_lvars_ex)) if filter_func(t_index, in_lvars_ex[i][0], in_lvars_ex[i][1], in_lvars_ex[i][2])]
             for lvar_i in filtered_lvars_i:
                 lvar = lvars[lvar_i]
                 new_name = None
