@@ -20,7 +20,8 @@ class lvar_range_finder_t(ida_hexrays.ctree_visitor_t):
     def __init__(self):
         ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_PARENTS)
 
-        self.ranges = {}
+        self.ranges_usage = {}
+        self.ranges_assignment = {}
         return
 
     def get_cur_expr_ea(self):
@@ -37,7 +38,12 @@ class lvar_range_finder_t(ida_hexrays.ctree_visitor_t):
         try:
             if e.op == ida_hexrays.cot_var:
                 idx = e.v.idx
-                ranges = self.ranges
+                ranges = self.ranges_usage
+                parent = self.parents.back()
+                if parent != None and parent.is_expr():
+                    parent_cexpr = parent.cexpr
+                    if parent_cexpr.op == ida_hexrays.cot_asg and parent_cexpr.x == e:
+                        ranges = self.ranges_assignment
                 ea = self.get_cur_expr_ea()
                 if ea != ida_idaapi.BADADDR:
                     if idx not in ranges:
@@ -88,13 +94,14 @@ def get_lvars_ex(cfunc):
         raise Exception("Couldn't associate lvars with segmented text")
     itfinder = lvar_range_finder_t()
     itfinder.apply_to(cfunc.body, None)
-    ranges = itfinder.ranges
+    ranges_usage = itfinder.ranges_usage
+    ranges_assignment = itfinder.ranges_assignment
     segmentations_map = {}
     retval = []
     for i in range(len(segmentations)):
         segmentations_map[datas[i]] = segmentations[i]
     for x in sorted(segmentations_map.keys()):
-        retval.append([lvars_list[x], segmentations_map[x], ranges[x] if x in ranges else None])
+        retval.append([lvars_list[x], segmentations_map[x], ranges_usage[x] if x in ranges_usage else (ranges_assignment[x] if x in ranges_assignment else None)])
     return retval
 
 def set_lvar_type_and_name(in_type_name_pairs, ea, filter_func=None):
